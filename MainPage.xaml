@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:skia="clr-namespace:SkiaSharp.Views.Maui.Controls;assembly=SkiaSharp.Views.Maui.Controls"
+             xmlns:local="clr-namespace:Net11FPSBenchmark"
+             x:Class="Net11FPSBenchmark.MainPage"
+             NavigationPage.HasNavigationBar="False">
+
+    <!-- Root Grid: canvas + UI overlay (same structure as GnollHack's RootGrid > MainGrid + UIGrid) -->
+    <Grid>
+        <!-- Full-screen SkiaSharp GL canvas (GPU-accelerated, same as GnollHack's MainCanvasView) -->
+        <skia:SKGLView x:Name="SkGlView"
+                       PaintSurface="OnPaintSurface"
+                       EnableTouchEvents="True"
+                       Touch="OnTouch" />
+
+        <!-- UI overlay grid (same 3-row structure as GnollHack's UIGrid) -->
+        <Grid x:Name="UIGrid"
+              InputTransparent="True"
+              CascadeInputTransparent="False"
+              RowSpacing="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- ============================================================ -->
+            <!-- TOP-RIGHT: Stone-style quick action buttons                   -->
+            <!-- (mirrors GnollHack's StoneButtonGrid — each is a              -->
+            <!--  GHCachedImage SKCanvasView drawn button)                      -->
+            <!-- ============================================================ -->
+            <HorizontalStackLayout Grid.Row="0"
+                                   x:Name="StoneButtonGrid"
+                                   HorizontalOptions="End"
+                                   Spacing="6"
+                                   Margin="6"
+                                   InputTransparent="False">
+                <local:CachedImageButton x:Name="StoneMenuBtn"
+                    WidthRequest="44" HeightRequest="44" />
+                <local:CachedImageButton x:Name="StoneCancelBtn"
+                    WidthRequest="44" HeightRequest="44" />
+                <local:CachedImageButton x:Name="StoneAutoCenterBtn"
+                    WidthRequest="44" HeightRequest="44" />
+                <local:CachedImageButton x:Name="StoneMinimapBtn"
+                    WidthRequest="44" HeightRequest="44" />
+                <local:CachedImageButton x:Name="StoneLookBtn"
+                    WidthRequest="44" HeightRequest="44" />
+                <local:CachedImageButton x:Name="StoneTravelBtn"
+                    WidthRequest="44" HeightRequest="44" />
+            </HorizontalStackLayout>
+
+            <!-- ============================================================ -->
+            <!-- BOTTOM: Two-row command button bar                            -->
+            <!-- (mirrors GnollHack's ButtonRowGrid with UpperCmdGrid          -->
+            <!--  and LowerCmdGrid — each button is a CachedImageButton        -->
+            <!--  drawn with SkiaSharp, same as GnollHack's GHCachedImage)     -->
+            <!-- ============================================================ -->
+            <Grid Grid.Row="2"
+                  x:Name="ButtonRowGrid"
+                  BackgroundColor="#66000000"
+                  Padding="4"
+                  HorizontalOptions="Fill"
+                  VerticalOptions="End"
+                  InputTransparent="False">
+                <VerticalStackLayout HorizontalOptions="Center"
+                                     Spacing="4">
+                    <!-- Upper command row (7 buttons, same as GnollHack) -->
+                    <HorizontalStackLayout x:Name="UpperCmdRow"
+                                           Spacing="4"
+                                           HorizontalOptions="Center">
+                        <local:CachedImageButton x:Name="BtnInventory"
+                            WidthRequest="52" HeightRequest="60" />
+                        <local:CachedImageButton x:Name="BtnSearch"
+                            WidthRequest="52" HeightRequest="60" />
+                        <local:CachedImageButton x:Name="BtnWait"
+                            WidthRequest="52" HeightRequest="60" />
+                        <local:CachedImageButton x:Name="BtnDropMany"
+                            WidthRequest="52" HeightRequest="60" />
+                        <local:CachedImageButton x:Name="BtnChat"
+                            WidthRequest="52" HeightRequest="60" />
+                        <local:CachedImageButton x:Name="BtnKick"
+                            WidthRequest="52" HeightRequest="60" />
+                        <local:CachedImageButton x:Name="BtnRepeat"
+                            WidthRequest="52" HeightRequest="60" />
+                    </HorizontalStackLayout>
+                    <!-- Lower command row (7 buttons, same as GnollHack) -->
+                    <HorizontalStackLayout x:Name="LowerCmdRow"
+                                           Spacing="4"
+                                           HorizontalOptions="Center">
+                        <local:CachedImageButton x:Name="BtnSwap"
+                            WidthRequest="52" HeightRequest="60" />
+                        <local:CachedImageButton x:Name="BtnFire"
+                            WidthRequest="52" HeightRequest="60" />
+                        <local:CachedImageButton x:Name="BtnThrow"
+                            WidthRequest="52" HeightRequest="60" />
+                        <local:CachedImageButton x:Name="BtnCast"
+                            WidthRequest="52" HeightRequest="60" />
+                        <local:CachedImageButton x:Name="BtnZap"
+                            WidthRequest="52" HeightRequest="60" />
+                        <local:CachedImageButton x:Name="BtnApply"
+                            WidthRequest="52" HeightRequest="60" />
+                        <local:CachedImageButton x:Name="BtnMore"
+                            WidthRequest="52" HeightRequest="60" />
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+            </Grid>
+        </Grid>
+    </Grid>
+</ContentPage>

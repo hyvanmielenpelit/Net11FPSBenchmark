@@ -1,0 +1,21 @@
+## .NET / MAUI
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+*.sln.docstates
+
+## Visual Studio
+.vs/
+*.rsuser
+launchSettings.json
+
+## NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+## OS
+.DS_Store
+Thumbs.db

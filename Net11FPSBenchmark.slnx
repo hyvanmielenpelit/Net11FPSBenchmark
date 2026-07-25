@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Net11FPSBenchmark.csproj">
+    <Deploy />
+  </Project>
+</Solution>
