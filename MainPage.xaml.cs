@@ -85,6 +85,24 @@ public partial class MainPage : ContentPage
         // Generate synthetic map data
         MapData.Generate();
 
+        // Attach tap gesture to ALL buttons — each toggles minimap mode
+        // (makes it easy to test both modes from any button)
+        var allButtons = new CachedImageButton[]
+        {
+            StoneMenuBtn, StoneCancelBtn, StoneAutoCenterBtn,
+            StoneMinimapBtn, StoneLookBtn, StoneTravelBtn,
+            BtnInventory, BtnSearch, BtnWait, BtnDropMany,
+            BtnChat, BtnKick, BtnRepeat,
+            BtnSwap, BtnFire, BtnThrow, BtnCast,
+            BtnZap, BtnApply, BtnMore
+        };
+        foreach (var btn in allButtons)
+        {
+            var tapGesture = new TapGestureRecognizer();
+            tapGesture.Tapped += (s, e) => ToggleMinimap();
+            btn.GestureRecognizers.Add(tapGesture);
+        }
+
         // Track button bar height for positioning messages
         ButtonRowGrid.SizeChanged += (s, e) =>
         {
@@ -274,6 +292,14 @@ public partial class MainPage : ContentPage
         {
             System.Diagnostics.Debug.WriteLine($"Failed to load button images: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Toggle minimap mode — called by all button taps.
+    /// </summary>
+    private void ToggleMinimap()
+    {
+        _renderer.MinimapMode = !_renderer.MinimapMode;
     }
 
     private void OnTouch(object? sender, SKTouchEventArgs e)

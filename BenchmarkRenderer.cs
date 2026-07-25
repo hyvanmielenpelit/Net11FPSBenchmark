@@ -248,7 +248,10 @@ public class BenchmarkRenderer
                     var destRect = new SKRect(destX, destY,
                         destX + Constants.TileWidth, destY + Constants.TileHeight);
 
-                    var paint = cell.IsDarkened ? _darkenedPaint : _normalPaint;
+                    // Darken top 7 rows and bottom 7 rows (mimics GnollHack's
+                    // lit center / dark periphery lighting model)
+                    bool isDarkened = row < 7 || row >= Constants.MapRows - 7;
+                    var paint = isDarkened ? _darkenedPaint : _normalPaint;
 
                     canvas.DrawImage(_tileSheet, sourceRect, destRect,
                         samplingOptions, paint);
