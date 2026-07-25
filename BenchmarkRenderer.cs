@@ -166,6 +166,8 @@ public class BenchmarkRenderer
         _tileSheet = SKImage.FromBitmap(bitmap);
     }
 
+    public SKImage? TileSheet => _tileSheet;
+
     /// <summary>
     /// Paint one complete frame. Full pipeline matching GnollHack's PaintMainGamePage.
     /// </summary>

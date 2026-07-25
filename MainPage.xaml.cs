@@ -256,6 +256,7 @@ public partial class MainPage : ContentPage
             using var stream = await FileSystem.OpenAppPackageFileAsync(
                 "tileset/benchmark_tiles.png");
             _renderer.LoadTileSheet(stream);
+            _ghRenderer.TileSheet = _renderer.TileSheet;
         }
         catch (Exception ex)
         {

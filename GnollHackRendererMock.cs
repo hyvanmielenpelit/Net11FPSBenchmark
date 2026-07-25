@@ -98,14 +98,26 @@ namespace Net11FPSBenchmark
 
         private long maincountervalue = 0;
 
+        public SKImage? TileSheet { get; set; }
+        private SKSamplingOptions _samplingOptions = new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None);
+
         public GnollHackRendererMock()
         {
+            Random rnd = new Random(12345);
             // Init mock map
             for (int x = 0; x < GHConstants.MapCols; x++)
             {
                 for (int y = 0; y < GHConstants.MapRows; y++)
                 {
                     _mapData[x, y] = new MockMapData();
+                    for (int i = 0; i < 7; i++) 
+                    {
+                        if (rnd.NextDouble() > 0.5) {
+                            _mapData[x, y].Layers.layer_glyphs[i] = rnd.Next(0, 3105);
+                        } else {
+                            _mapData[x, y].Layers.layer_glyphs[i] = -1;
+                        }
+                    }
                 }
             }
 
@@ -241,8 +253,16 @@ namespace Net11FPSBenchmark
                                     float ty = offsetY + tileHeight * mapy;
                                     
                                     // Normally GnollHack does canvas.DrawBitmap
-                                    // To test loop overhead, we will do a very lightweight draw for each layer
-                                    canvas.DrawRect(tx, ty, 4, 4, paint);
+                                    // To test loop overhead and identical drawing load, draw a real tile
+                                    int tileIdx = layers.layer_glyphs[layer_idx];
+                                    if (tileIdx >= 0 && TileSheet != null)
+                                    {
+                                        int srcX = (tileIdx % 69) * GHConstants.TileWidth;
+                                        int srcY = (tileIdx / 69) * GHConstants.TileHeight;
+                                        var sourceRect = new SKRect(srcX, srcY, srcX + GHConstants.TileWidth, srcY + GHConstants.TileHeight);
+                                        var destRect = new SKRect(tx, ty, tx + GHConstants.TileWidth, ty + GHConstants.TileHeight);
+                                        canvas.DrawImage(TileSheet, sourceRect, destRect, _samplingOptions, null);
+                                    }
                                 }
                             }
                         }
