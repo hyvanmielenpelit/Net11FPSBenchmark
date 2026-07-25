@@ -173,10 +173,10 @@ public class BenchmarkRenderer
     /// </summary>
     public void PaintFrame(SKCanvas canvas, int canvasWidth, int canvasHeight, bool drawMapAndText = true)
     {
-        canvas.Clear(SKColors.Black);
-
         if (drawMapAndText)
         {
+            canvas.Clear(SKColors.Black);
+
             if (_tileSheet == null)
             {
                 canvas.DrawText("Loading tile sheet...", 50, canvasHeight / 2,
@@ -265,6 +265,7 @@ public class BenchmarkRenderer
 
         // Reset matrix for HUD overlays (screen space)
         canvas.ResetMatrix();
+        }
 
         // ================================================================
         // STATUS BAR — drawn on canvas above the bottom button bar
@@ -276,7 +277,6 @@ public class BenchmarkRenderer
         // Word-wrapped text with stroke+fill rendering (same as GnollHack)
         // ================================================================
         DrawMessages(canvas, canvasWidth, canvasHeight);
-        }
 
         // ================================================================
         // FPS OVERLAY — top-left corner

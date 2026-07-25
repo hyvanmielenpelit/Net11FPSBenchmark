@@ -324,6 +324,7 @@ public partial class MainPage : ContentPage
     private void ToggleMinimap()
     {
         _renderer.MinimapMode = !_renderer.MinimapMode;
+        _ghRenderer.MinimapMode = _renderer.MinimapMode;
     }
 
     private void ToggleRendererBtn_Clicked(object sender, EventArgs e)
