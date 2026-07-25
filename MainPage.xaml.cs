@@ -14,7 +14,10 @@ namespace Net11FPSBenchmark;
 /// </summary>
 public partial class MainPage : ContentPage
 {
-    private readonly BenchmarkRenderer _renderer;
+    private readonly BenchmarkRenderer _renderer = new BenchmarkRenderer();
+    private readonly GnollHackRendererMock _ghRenderer = new GnollHackRendererMock();
+    private bool _useGnollHackRenderer = false;
+
     private readonly Stopwatch _stopwatch;
 
     // FPS calculation — same atomic counter approach as GnollHack
@@ -79,7 +82,6 @@ public partial class MainPage : ContentPage
     {
         InitializeComponent();
 
-        _renderer = new BenchmarkRenderer();
         _stopwatch = Stopwatch.StartNew();
 
         // Generate synthetic map data
@@ -152,7 +154,7 @@ public partial class MainPage : ContentPage
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            SkGlView.InvalidateSurface();
+            MainCanvasView.InvalidateSurface();
         });
     }
 
@@ -185,9 +187,22 @@ public partial class MainPage : ContentPage
     }
 
     /// <summary>
+    /// SKCanvasView paint handler (fallback)
+    /// </summary>
+    private void OnPaintSurface(object? sender, SKPaintSurfaceEventArgs e)
+    {
+        PaintInternal(e.Surface.Canvas, e.Info.Width, e.Info.Height);
+    }
+
+    /// <summary>
     /// SKGLView paint handler — mirrors GnollHack's canvasView_PaintSurface.
     /// </summary>
-    private void OnPaintSurface(object? sender, SKPaintGLSurfaceEventArgs e)
+    private void OnPaintSurfaceGL(object? sender, SKPaintGLSurfaceEventArgs e)
+    {
+        PaintInternal(e.Surface.Canvas, e.BackendRenderTarget.Width, e.BackendRenderTarget.Height);
+    }
+
+    private void PaintInternal(SKCanvas canvas, int width, int height)
     {
         // Reentrancy guard
         if (Interlocked.CompareExchange(ref _isDrawing, 1, 0) != 0)
@@ -207,15 +222,23 @@ public partial class MainPage : ContentPage
                 _ = LoadButtonImagesAsync();
             }
 
-            SKCanvas canvas = e.Surface.Canvas;
-            int width = e.BackendRenderTarget.Width;
-            int height = e.BackendRenderTarget.Height;
-
             // Pass the device pixel density to convert XAML dp to canvas pixels
             float density = (float)DeviceDisplay.MainDisplayInfo.Density;
-            _renderer.Fps = _currentFps;
-            _renderer.ButtonBarHeightPx = (float)(_buttonBarHeight * density);
-            _renderer.PaintFrame(canvas, width, height);
+            
+            if (_useGnollHackRenderer)
+            {
+                _ghRenderer.PaintMainGamePage(canvas, width, height);
+                // Also paint the benchmark UI overlays on top so we can still see FPS
+                _renderer.Fps = _currentFps;
+                _renderer.ButtonBarHeightPx = (float)(_buttonBarHeight * density);
+                _renderer.PaintFrame(canvas, width, height, drawMapAndText: false); 
+            }
+            else
+            {
+                _renderer.Fps = _currentFps;
+                _renderer.ButtonBarHeightPx = (float)(_buttonBarHeight * density);
+                _renderer.PaintFrame(canvas, width, height, drawMapAndText: true);
+            }
 
             Interlocked.Increment(ref _frameCounter);
             canvas.Flush();
@@ -300,6 +323,18 @@ public partial class MainPage : ContentPage
     private void ToggleMinimap()
     {
         _renderer.MinimapMode = !_renderer.MinimapMode;
+    }
+
+    private void ToggleRendererBtn_Clicked(object sender, EventArgs e)
+    {
+        _useGnollHackRenderer = !_useGnollHackRenderer;
+        ToggleRendererBtn.Text = _useGnollHackRenderer ? "Renderer: GnollHack (Mock)" : "Renderer: Simple";
+        ToggleRendererBtn.BackgroundColor = _useGnollHackRenderer ? Colors.DarkGreen : Colors.DarkRed;
+    }
+
+    private void OnButtonClicked(object? sender, EventArgs e)
+    {
+        // Placeholder for future click handling if needed
     }
 
     private void OnTouch(object? sender, SKTouchEventArgs e)

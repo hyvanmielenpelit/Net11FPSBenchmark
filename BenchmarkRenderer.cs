@@ -169,24 +169,26 @@ public class BenchmarkRenderer
     /// <summary>
     /// Paint one complete frame. Full pipeline matching GnollHack's PaintMainGamePage.
     /// </summary>
-    public void PaintFrame(SKCanvas canvas, int canvasWidth, int canvasHeight)
+    public void PaintFrame(SKCanvas canvas, int canvasWidth, int canvasHeight, bool drawMapAndText = true)
     {
         canvas.Clear(SKColors.Black);
 
-        if (_tileSheet == null)
+        if (drawMapAndText)
         {
-            canvas.DrawText("Loading tile sheet...", 50, canvasHeight / 2,
-                SKTextAlign.Left, _fpsFont, _fpsPaint);
-            return;
-        }
+            if (_tileSheet == null)
+            {
+                canvas.DrawText("Loading tile sheet...", 50, canvasHeight / 2,
+                    SKTextAlign.Left, _fpsFont, _fpsPaint);
+                return;
+            }
 
-        // ================================================================
-        // TILE RENDERING — 22-pass layer-first iteration
-        // ================================================================
-        float tileScale;
-        float offsetX, offsetY;
+            // ================================================================
+            // TILE RENDERING — 22-pass layer-first iteration
+            // ================================================================
+            float tileScale;
+            float offsetX, offsetY;
 
-        if (MinimapMode)
+            if (MinimapMode)
         {
             float mapPixelWidth = Constants.MapCols * Constants.TileWidth;
             float mapPixelHeight = Constants.MapRows * Constants.TileHeight;
@@ -272,6 +274,7 @@ public class BenchmarkRenderer
         // Word-wrapped text with stroke+fill rendering (same as GnollHack)
         // ================================================================
         DrawMessages(canvas, canvasWidth, canvasHeight);
+        }
 
         // ================================================================
         // FPS OVERLAY — top-left corner
@@ -356,12 +359,11 @@ public class BenchmarkRenderer
 
         // ================================================================
         // RENDERING — draw from bottom upward (newest at bottom)
-        // Position: just above the status bar area (which sits above the button bar)
+        // Position: just above the button bar
         // Same rendering as GnollHack: iterate from newest to oldest,
         // decrementing the row index per wrapped line
         // ================================================================
-        float statusBarHeight = 120;
-        float bottomY = canvasHeight - ButtonBarHeightPx - statusBarHeight;
+        float bottomY = canvasHeight - ButtonBarHeightPx;
         int maxRows = MaxVisibleMessages;
         int j = maxRows - 1; // Row index counting down from bottom
 
@@ -403,7 +405,8 @@ public class BenchmarkRenderer
     private void DrawStatusBar(SKCanvas canvas, int canvasWidth, int canvasHeight)
     {
         float barHeight = 120;
-        float barTop = canvasHeight - ButtonBarHeightPx - barHeight;
+        // Move to top, just below the FPS/Info overlay
+        float barTop = 140;
 
         // Semi-transparent dark background
         canvas.DrawRect(0, barTop, canvasWidth, barHeight, _statusBgPaint);

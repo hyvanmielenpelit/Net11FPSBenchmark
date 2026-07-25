@@ -8,11 +8,17 @@
 
     <!-- Root Grid: canvas + UI overlay (same structure as GnollHack's RootGrid > MainGrid + UIGrid) -->
     <Grid>
-        <!-- Full-screen SkiaSharp GL canvas (GPU-accelerated, same as GnollHack's MainCanvasView) -->
-        <skia:SKGLView x:Name="SkGlView"
-                       PaintSurface="OnPaintSurface"
-                       EnableTouchEvents="True"
-                       Touch="OnTouch" />
+        <!-- SwitchableCanvasView (GPU-accelerated or CPU depending on UseGL, exact GnollHack logic) -->
+        <local:SwitchableCanvasView x:Name="MainCanvasView"
+                                    UseGL="True"
+                                    PaintSurfaceGL="OnPaintSurfaceGL"
+                                    PaintSurface="OnPaintSurface"
+                                    Touch="OnTouch" />
+
+        <!-- Elements to simulate GnollHack's visual tree overhead on iOS -->
+        <!-- 1. The unused SKCanvasView from SwitchableCanvasView is now built into SwitchableCanvasView itself -->
+        <!-- 2. The FadeFrame overlay -->
+        <Border x:Name="FadeFrame" IsVisible="False" InputTransparent="True" BackgroundColor="Black" Stroke="Black" Padding="12,12" StrokeThickness="1" StrokeShape="Rectangle" HorizontalOptions="Fill" VerticalOptions="Fill" />
 
         <!-- UI overlay grid (same 3-row structure as GnollHack's UIGrid) -->
         <Grid x:Name="UIGrid"
@@ -24,6 +30,19 @@
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
+
+            <!-- TOGGLE BUTTON -->
+            <Button x:Name="ToggleRendererBtn"
+                    Grid.Row="1"
+                    Text="Renderer: Simple"
+                    HorizontalOptions="Center"
+                    VerticalOptions="Center"
+                    Margin="10"
+                    Padding="10"
+                    BackgroundColor="DarkRed"
+                    TextColor="White"
+                    InputTransparent="False"
+                    Clicked="ToggleRendererBtn_Clicked" />
 
             <!-- ============================================================ -->
             <!-- TOP-RIGHT: Stone-style quick action buttons                   -->
@@ -106,5 +125,20 @@
                 </VerticalStackLayout>
             </Grid>
         </Grid>
+
+        <!-- 3. Complex invisible menu overlay (MenuGrid) with its own canvas and frames -->
+        <Grid x:Name="MenuGrid" HorizontalOptions="Fill" VerticalOptions="Fill" BackgroundColor="#AA000000" IsVisible="False">
+            <skia:SKCanvasView x:Name="MenuCanvas" IsVisible="True" HorizontalOptions="Fill" VerticalOptions="Fill" />
+            <Border BackgroundColor="#66000000" Stroke="Black" Padding="12,12" StrokeThickness="1" StrokeShape="RoundRectangle 10,10,10,10" HorizontalOptions="Center" VerticalOptions="Center">
+                <VerticalStackLayout Spacing="6">
+                    <Label Text="Menu Overlay Simulator" FontSize="20" HorizontalOptions="Center" TextColor="White" />
+                    <Picker WidthRequest="180" BackgroundColor="#303030" TextColor="White" />
+                </VerticalStackLayout>
+            </Border>
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer />
+            </Grid.GestureRecognizers>
+        </Grid>
+
     </Grid>
 </ContentPage>
