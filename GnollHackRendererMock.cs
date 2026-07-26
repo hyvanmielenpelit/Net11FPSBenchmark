@@ -66,6 +66,14 @@ namespace Net11FPSBenchmark
         public int layer;
     }
 
+    public struct MockDrawCommand
+    {
+        public SKMatrix Matrix;
+        public SKRect SourceRect;
+        public SKRect DestRect;
+        public bool IsDark;
+    }
+
     public static class GHApp
     {
         public static object Glyph2TileLock = new object();
@@ -128,7 +136,10 @@ namespace Net11FPSBenchmark
     public class GnollHackRendererMock
     {
         public bool SimulateArrayBottleneck = true;
+        public bool SimulateCanvasTransform = true;
+        public bool SimulateSplitDrawing = true;
         private MockGame curGame = new MockGame();
+        private List<MockDrawCommand> _mockDrawCommands = new List<MockDrawCommand>(512);
         private MockMapData[,] _mapData = new MockMapData[GHConstants.MapCols, GHConstants.MapRows];
         private int[,] _draw_shadow = new int[GHConstants.MapCols, GHConstants.MapRows];
         private List<MockDrawOrder> _draw_order = new List<MockDrawOrder>();
@@ -563,6 +574,7 @@ namespace Net11FPSBenchmark
             lock (GHApp.Glyph2TileLock)
             {
                 Array.Clear(_draw_shadow, 0, _draw_shadow.Length);
+                _mockDrawCommands.Clear();
 
                 lock (_drawOrderLock)
                 {
@@ -696,14 +708,70 @@ namespace Net11FPSBenchmark
                                     int srcY = (tileIdx / GHConstants.TilesPerRow) * GHConstants.TileHeight;
                                     var sourceRect = new SKRect(srcX, srcY,
                                         srcX + GHConstants.TileWidth, srcY + GHConstants.TileHeight);
-                                    var destRect = new SKRect(tx, ty,
-                                        tx + GHConstants.TileWidth, ty + GHConstants.TileHeight);
                                     var paint = isDark ? _darkenedPaint : _normalPaint;
-                                    canvas.DrawImage(TileSheet, sourceRect, destRect,
-                                        _samplingOptions, paint);
+
+                                    if (SimulateCanvasTransform)
+                                    {
+                                        /* Simulate GnollHack's PaintMapTile pattern:
+                                         * using (new SKAutoCanvasRestore(canvas, true))
+                                         * {
+                                         *     canvas.Translate(tr_x, tr_y);
+                                         *     canvas.Scale(sc_x, sc_y, 0, 0);
+                                         *     canvas.DrawImage(..., localRect, ...);
+                                         * }
+                                         * Every tile in GnollHack goes through this. */
+                                        canvas.Save();
+                                        canvas.Translate(tx, ty);
+                                        canvas.Scale(1.0f, 1.0f, 0, 0);
+                                        var destRect = new SKRect(0, 0,
+                                            GHConstants.TileWidth, GHConstants.TileHeight);
+                                        canvas.DrawImage(TileSheet, sourceRect, destRect,
+                                            _samplingOptions, paint);
+                                        canvas.Restore();
+                                    }
+                                    else
+                                    {
+                                        var destRect = new SKRect(tx, ty,
+                                            tx + GHConstants.TileWidth, ty + GHConstants.TileHeight);
+                                        canvas.DrawImage(TileSheet, sourceRect, destRect,
+                                            _samplingOptions, paint);
+                                    }
+                                    /* Store for delayed replay (split drawing):
+                                     * In GnollHack, DrawSplitBitmap stores the top
+                                     * portion of tall/enlarged tiles in _drawCommandList
+                                     * for a second pass with per-command SetMatrix. */
+                                    if (SimulateSplitDrawing && layer_idx > 0)
+                                    {
+                                        _mockDrawCommands.Add(new MockDrawCommand
+                                        {
+                                            Matrix = canvas.TotalMatrix,
+                                            SourceRect = sourceRect,
+                                            DestRect = new SKRect(tx, ty,
+                                                tx + GHConstants.TileWidth, ty + GHConstants.TileHeight),
+                                            IsDark = isDark
+                                        });
+                                    }
                                 }
                             }
                         }
+                    }
+                }
+
+                /* ============================================================
+                 * DELAYED DRAW REPLAY PASS
+                 * Matches GnollHack's second pass over _drawCommandList
+                 * (GamePage.xaml.cs lines 8573-8803).
+                 * Each command gets its own SetMatrix + DrawImage call.
+                 * ============================================================ */
+                if (SimulateSplitDrawing)
+                {
+                    for (int i = 0; i < _mockDrawCommands.Count; i++)
+                    {
+                        var dc = _mockDrawCommands[i];
+                        canvas.SetMatrix(dc.Matrix);
+                        var paint = dc.IsDark ? _darkenedPaint : _normalPaint;
+                        canvas.DrawImage(TileSheet, dc.SourceRect, dc.DestRect,
+                            _samplingOptions, paint);
                     }
                 }
             }

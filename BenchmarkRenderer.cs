@@ -14,7 +14,10 @@ namespace Net11FPSBenchmark;
 public class BenchmarkRenderer
 {
     public bool SimulateArrayBottleneck = true;
+    public bool SimulateCanvasTransform = true;
+    public bool SimulateSplitDrawing = true;
     private SKImage? _tileSheet;
+    private List<MockDrawCommand> _mockDrawCommands = new List<MockDrawCommand>(512);
     private readonly SKPaint _normalPaint;
     private readonly SKPaint _darkenedPaint;
 
@@ -229,6 +232,7 @@ public class BenchmarkRenderer
         }
 
         var samplingOptions = new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None);
+        _mockDrawCommands.Clear();
 
         for (int layerIdx = 0; layerIdx < Constants.TotalRenderPasses; layerIdx++)
         {
@@ -276,19 +280,65 @@ public class BenchmarkRenderer
                     var sourceRect = new SKRect(srcX, srcY,
                         srcX + Constants.TileWidth, srcY + Constants.TileHeight);
 
-                    float destX = col * Constants.TileWidth;
-                    float destY = row * Constants.TileHeight;
-                    var destRect = new SKRect(destX, destY,
-                        destX + Constants.TileWidth, destY + Constants.TileHeight);
 
                     // Darken top 7 rows and bottom 7 rows (mimics GnollHack's
                     // lit center / dark periphery lighting model)
                     bool isDarkened = row < 7 || row >= Constants.MapRows - 7;
                     var paint = isDarkened ? _darkenedPaint : _normalPaint;
 
-                    canvas.DrawImage(_tileSheet, sourceRect, destRect,
-                        samplingOptions, paint);
+                    if (SimulateCanvasTransform)
+                    {
+                        /* Simulate GnollHack's PaintMapTile:
+                         * Save/Translate/Scale/DrawImage/Restore per tile */
+                        canvas.Save();
+                        float destX = col * Constants.TileWidth;
+                        float destY = row * Constants.TileHeight;
+                        canvas.Translate(destX, destY);
+                        canvas.Scale(1.0f, 1.0f, 0, 0);
+                        var destRect = new SKRect(0, 0,
+                            Constants.TileWidth, Constants.TileHeight);
+                        canvas.DrawImage(_tileSheet, sourceRect, destRect,
+                            samplingOptions, paint);
+                        canvas.Restore();
+                    }
+                    else
+                    {
+                        float destX = col * Constants.TileWidth;
+                        float destY = row * Constants.TileHeight;
+                        var destRect = new SKRect(destX, destY,
+                            destX + Constants.TileWidth, destY + Constants.TileHeight);
+                        canvas.DrawImage(_tileSheet, sourceRect, destRect,
+                            samplingOptions, paint);
+                    }
+
+                    /* Store for delayed replay on non-floor layers */
+                    if (SimulateSplitDrawing && layerIdx > 0)
+                    {
+                        float dx = col * Constants.TileWidth;
+                        float dy = row * Constants.TileHeight;
+                        _mockDrawCommands.Add(new MockDrawCommand
+                        {
+                            Matrix = canvas.TotalMatrix,
+                            SourceRect = sourceRect,
+                            DestRect = new SKRect(dx, dy,
+                                dx + Constants.TileWidth, dy + Constants.TileHeight),
+                            IsDark = isDarkened
+                        });
+                    }
                 }
+            }
+        }
+
+        /* Delayed draw replay pass */
+        if (SimulateSplitDrawing)
+        {
+            for (int i = 0; i < _mockDrawCommands.Count; i++)
+            {
+                var dc = _mockDrawCommands[i];
+                canvas.SetMatrix(dc.Matrix);
+                var p = dc.IsDark ? _darkenedPaint : _normalPaint;
+                canvas.DrawImage(_tileSheet, dc.SourceRect, dc.DestRect,
+                    samplingOptions, p);
             }
         }
 

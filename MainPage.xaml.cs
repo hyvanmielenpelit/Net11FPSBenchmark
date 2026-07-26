@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using SkiaSharp;
 using SkiaSharp.Views.Maui;
 using SkiaSharp.Views.Maui.Controls;
@@ -18,6 +18,8 @@ public partial class MainPage : ContentPage
     private readonly GnollHackRendererMock _ghRenderer = new GnollHackRendererMock();
     private bool _useGnollHackRenderer = true;
     private bool _simulateArrayBottleneck = true;
+    private bool _simulateCanvasTransform = true;
+    private bool _simulateSplitDrawing = true;
 
     private readonly Stopwatch _stopwatch;
 
@@ -346,6 +348,24 @@ public partial class MainPage : ContentPage
         ToggleArrayBottleneckBtn.BackgroundColor = _simulateArrayBottleneck ? Colors.Purple : Colors.Gray;
         _renderer.SimulateArrayBottleneck = _simulateArrayBottleneck;
         _ghRenderer.SimulateArrayBottleneck = _simulateArrayBottleneck;
+    }
+
+    private void ToggleCanvasTransformBtn_Clicked(object sender, EventArgs e)
+    {
+        _simulateCanvasTransform = !_simulateCanvasTransform;
+        ToggleCanvasTransformBtn.Text = _simulateCanvasTransform ? "Canvas Transform: ON" : "Canvas Transform: OFF";
+        ToggleCanvasTransformBtn.BackgroundColor = _simulateCanvasTransform ? Colors.DarkOrange : Colors.Gray;
+        _renderer.SimulateCanvasTransform = _simulateCanvasTransform;
+        _ghRenderer.SimulateCanvasTransform = _simulateCanvasTransform;
+    }
+
+    private void ToggleSplitDrawingBtn_Clicked(object sender, EventArgs e)
+    {
+        _simulateSplitDrawing = !_simulateSplitDrawing;
+        ToggleSplitDrawingBtn.Text = _simulateSplitDrawing ? "Split Drawing: ON" : "Split Drawing: OFF";
+        ToggleSplitDrawingBtn.BackgroundColor = _simulateSplitDrawing ? Colors.DarkCyan : Colors.Gray;
+        _renderer.SimulateSplitDrawing = _simulateSplitDrawing;
+        _ghRenderer.SimulateSplitDrawing = _simulateSplitDrawing;
     }
 
     private void OnButtonClicked(object sender, EventArgs e)
