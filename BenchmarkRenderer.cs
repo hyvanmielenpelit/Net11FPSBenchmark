@@ -13,6 +13,7 @@ namespace Net11FPSBenchmark;
 /// </summary>
 public class BenchmarkRenderer
 {
+    public bool SimulateArrayBottleneck = true;
     private SKImage? _tileSheet;
     private readonly SKPaint _normalPaint;
     private readonly SKPaint _darkenedPaint;
@@ -236,6 +237,34 @@ public class BenchmarkRenderer
                 for (int col = startCol; col < endCol; col++)
                 {
                     ref readonly var cell = ref MapData.Cells[col, row];
+                    if (SimulateArrayBottleneck)
+                    {
+                        /* Simulate GnollHack's drawing loop: ~19 separate
+                         * _mapData[x,y] accesses per draw-order layer.
+                         * Each access on CoreCLR re-computes the 2D address
+                         * and performs bounds checks on the ~300-byte struct. */
+                        bool loc_is_you = (MapData.Data[col, row].Layers.layer_flags & 1) != 0;
+                        bool showing_det = (MapData.Data[col, row].Layers.layer_flags & 2) != 0;
+                        bool canspotself = (MapData.Data[col, row].Layers.monster_flags & 1) != 0;
+                        sbyte mh = MapData.Data[col, row].Layers.special_monster_layer_height;
+                        sbyte fdh = MapData.Data[col, row].Layers.special_feature_doodad_layer_height;
+                        short msq = MapData.Data[col, row].Layers.missile_special_quality;
+                        sbyte mox = MapData.Data[col, row].Layers.monster_origin_x;
+                        sbyte moy = MapData.Data[col, row].Layers.monster_origin_y;
+                        long gpv = MapData.Data[col, row].GlyphPrintMainCounterValue;
+                        long opv = MapData.Data[col, row].GlyphObjectPrintMainCounterValue;
+                        long genv = MapData.Data[col, row].GlyphGeneralPrintMainCounterValue;
+                        short missile_h = MapData.Data[col, row].Layers.missile_height;
+                        bool obj_in_pit = (MapData.Data[col, row].Layers.layer_flags & 4) != 0;
+                        bool enlarg = MapData.Data[col, row].HasEnlargementOrAnimationOrSpecialHeight;
+                        bool dark = MapData.Data[col, row].IsDarkened;
+                        int gui_g = MapData.Data[col, row].Layers.layer_gui_glyph_6;
+                        bool transp = (MapData.Data[col, row].Layers.monster_flags & 0x10) != 0;
+                        int hp = MapData.Data[col, row].Layers.monster_hp;
+                        int maxhp = MapData.Data[col, row].Layers.monster_maxhp;
+                        /* Use results to prevent dead-code elimination */
+                        if (loc_is_you && mox == 127 && gpv == long.MaxValue) continue;
+                    }
                     int tileIdx = cell.LayerTiles[layerIdx];
                     if (tileIdx < 0)
                         continue;

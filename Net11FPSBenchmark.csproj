@@ -1,7 +1,23 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-	<PropertyGroup>
+	<!-- ================================================================
+	     Auto-detect .NET version from the active SDK (set by global.json).
+	     Just swap global.json to switch — no need to edit this file.
+	     
+	     Use switch-dotnet.ps1 10/11 to swap global.json, or do it manually:
+	       copy global.net10.json global.json
+	       copy global.net11.json global.json
+	     ================================================================ -->
+	<PropertyGroup Condition="$(NETCoreSdkVersion.StartsWith('10.'))">
+		<TargetFrameworks>net10.0-android;net10.0-ios</TargetFrameworks>
+		<MauiVersion>10.0.90</MauiVersion>
+	</PropertyGroup>
+	<PropertyGroup Condition="$(NETCoreSdkVersion.StartsWith('11.'))">
 		<TargetFrameworks>net11.0-android;net11.0-ios</TargetFrameworks>
+		<!-- MauiVersion for .NET 11 is set by the SDK -->
+	</PropertyGroup>
+
+	<PropertyGroup>
 		<OutputType>Exe</OutputType>
 		<UseMaui>true</UseMaui>
 		<SingleProject>true</SingleProject>
@@ -28,7 +44,9 @@
 		<RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
 		<RunAOTCompilation>true</RunAOTCompilation>
 	</PropertyGroup>
-	<PropertyGroup Condition="'$(TargetFramework)'=='net11.0-ios'">
+
+	<!-- iOS codesign -->
+	<PropertyGroup Condition="$(TargetFramework.EndsWith('-ios'))">
 	  <CodesignKey>Apple Development: Created via API (79X3KBSWAS)</CodesignKey>
 	  <CodesignProvision>VS: WildCard Development</CodesignProvision>
 	</PropertyGroup>
@@ -44,5 +62,14 @@
 	<ItemGroup>
 		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
 	</ItemGroup>
+
+	<!-- Print active SDK/.NET version at build start -->
+	<Target Name="PrintVersionInfo" BeforeTargets="Build">
+		<Message Importance="high" Text="========================================" />
+		<Message Importance="high" Text="  SDK Version:    $(NETCoreSdkVersion)" />
+		<Message Importance="high" Text="  Target:         $(TargetFramework)" />
+		<Message Importance="high" Text="  MAUI Version:   $(MauiVersion)" />
+		<Message Importance="high" Text="========================================" />
+	</Target>
 
 </Project>

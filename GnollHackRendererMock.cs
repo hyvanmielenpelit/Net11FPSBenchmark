@@ -119,7 +119,7 @@ namespace Net11FPSBenchmark
      *
      * Drawing loop:
      *   lock(Glyph2TileLock)
-     *     lock(_drawOrderLock)  â€” AlternativeLayerDrawing path
+     *     lock(_drawOrderLock) : AlternativeLayerDrawing path
      *       for each mapy
      *         for each mapx
      *           for each draw_order entry
@@ -127,6 +127,7 @@ namespace Net11FPSBenchmark
      * ================================================================ */
     public class GnollHackRendererMock
     {
+        public bool SimulateArrayBottleneck = true;
         private MockGame curGame = new MockGame();
         private MockMapData[,] _mapData = new MockMapData[GHConstants.MapCols, GHConstants.MapRows];
         private int[,] _draw_shadow = new int[GHConstants.MapCols, GHConstants.MapRows];
@@ -174,7 +175,7 @@ namespace Net11FPSBenchmark
         public bool MinimapMode { get; set; }
         private SKSamplingOptions _samplingOptions = new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None);
 
-        /* Darkening paint — matches GnollHack's color filter for unlit areas */
+        /* Darkening paint: matches GnollHack's color filter for unlit areas */
         private readonly SKPaint _normalPaint;
         private readonly SKPaint _darkenedPaint;
 
@@ -196,7 +197,7 @@ namespace Net11FPSBenchmark
             Random rnd = new Random(12345);
 
             /* Init mock map with realistic tile distribution:
-             * - Most tiles: 1 layer (floor/background only) — layer 0
+             * - Most tiles: 1 layer (floor/background only): layer 0
              * - ~20 tiles per map: 2-3 layers (floor + monster or object)
              * - ~5 tiles per map: 5-10 layers (item piles)
              * This matches real GnollHack gameplay density. */
@@ -233,7 +234,7 @@ namespace Net11FPSBenchmark
                     /* ~50% of tiles are darkened (unlit areas) */
                     _mapData[x, y].IsDarkened = rnd.NextDouble() < 0.5;
 
-                    /* Layer 0 (floor) — always present */
+                    /* Layer 0 (floor): always present */
                     int floorTile = rnd.Next(0, 100);
                     _mapData[x, y].Layers.layer_glyphs[0] = floorTile;
                     _mapData[x, y].Layers.layer_gui_glyphs[0] = floorTile;
@@ -266,7 +267,7 @@ namespace Net11FPSBenchmark
                 }
             }
 
-            /* Init draw order — GnollHack uses MAX_LAYERS + 2 entries
+            /* Init draw order: GnollHack uses MAX_LAYERS + 2 entries
              * (10 real layers + shadow layer + UI layer = 12).
              * The AlternativeLayerDrawing path iterates all of them
              * per tile, with enlargement_position values -1..4. */
@@ -295,7 +296,7 @@ namespace Net11FPSBenchmark
             if (canvaswidth <= 16 || canvasheight <= 16) return;
 
             /* ============================================================
-             * LOCK SEQUENCE — exact same order as GnollHack
+             * LOCK SEQUENCE: exact same order as GnollHack
              * GamePage.xaml.cs lines 7421-7878
              * ============================================================ */
 
@@ -465,7 +466,7 @@ namespace Net11FPSBenchmark
             maincountervalue++;
 
             /* ============================================================
-             * TILE SIZE + VIEWPORT — mirrors GnollHack lines 7972-8109
+             * TILE SIZE + VIEWPORT: mirrors GnollHack lines 7972-8109
              * GnollHack calculates usedFontSize, width, height, then
              * computes altStartX/altEndX/altStartY/altEndY for culling.
              * We replicate this with a scale+translate matrix like the
@@ -493,7 +494,7 @@ namespace Net11FPSBenchmark
             float targetscale = tileHeight / (float)GHConstants.TileHeight;
             float pit_border = (float)GHConstants.PIT_BOTTOM_BORDER * tileHeight / (float)GHConstants.TileHeight;
 
-            /* Scale and center the map — supports minimap mode */
+            /* Scale and center the map: supports minimap mode */
             float tileScale;
             float cameraX, cameraY;
             float offsetX, offsetY;
@@ -544,7 +545,7 @@ namespace Net11FPSBenchmark
             }
 
             /* ============================================================
-             * DRAWING LOOP — matches AlternativeLayerDrawing path
+             * DRAWING LOOP: matches AlternativeLayerDrawing path
              * (GamePage.xaml.cs lines 8037-8276)
              *
              * Structure:
@@ -624,24 +625,62 @@ namespace Net11FPSBenchmark
                                     continue;
 
                                 /* ---- Fetch all layer properties (matches lines 8164-8182) ---- */
-                                bool loc_is_you = (layers.layer_flags & 1) != 0;
-                                bool showing_detection = (layers.layer_flags & 2) != 0;
-                                bool canspotself = (layers.monster_flags & 1) != 0;
-                                sbyte monster_height = layers.special_monster_layer_height;
-                                sbyte feature_doodad_height = layers.special_feature_doodad_layer_height;
-                                short missile_special_quality = layers.missile_special_quality;
-                                sbyte monster_origin_x = layers.monster_origin_x;
-                                sbyte monster_origin_y = layers.monster_origin_y;
-                                long glyphprintmaincountervalue = _mapData[source_x, source_y].GlyphPrintMainCounterValue;
+                                bool loc_is_you, showing_detection, canspotself, obj_in_pit;
+                                sbyte monster_height, feature_doodad_height, monster_origin_x, monster_origin_y;
+                                short missile_special_quality, missile_height;
+                                long glyphprintmaincountervalue, glyphobjectprintmaincountervalue, glyphgeneralprintmaincountervalue;
+                                bool isDark;
+
+                                if (SimulateArrayBottleneck)
+                                {
+                                    /* When ON: access the ~300-byte STRUCT array via
+                                     * repeated 2D indexing — this is what kills CoreCLR.
+                                     * Each MapData.Data[x,y] forces address calc + bounds check
+                                     * on the ~300-byte struct. 19 accesses per layer. */
+                                    loc_is_you = (MapData.Data[source_x, source_y].Layers.layer_flags & 1) != 0;
+                                    showing_detection = (MapData.Data[source_x, source_y].Layers.layer_flags & 2) != 0;
+                                    canspotself = (MapData.Data[source_x, source_y].Layers.monster_flags & 1) != 0;
+                                    monster_height = MapData.Data[source_x, source_y].Layers.special_monster_layer_height;
+                                    feature_doodad_height = MapData.Data[source_x, source_y].Layers.special_feature_doodad_layer_height;
+                                    missile_special_quality = MapData.Data[source_x, source_y].Layers.missile_special_quality;
+                                    monster_origin_x = MapData.Data[source_x, source_y].Layers.monster_origin_x;
+                                    monster_origin_y = MapData.Data[source_x, source_y].Layers.monster_origin_y;
+                                    glyphprintmaincountervalue = MapData.Data[source_x, source_y].GlyphPrintMainCounterValue;
+                                    glyphobjectprintmaincountervalue = MapData.Data[source_x, source_y].GlyphObjectPrintMainCounterValue;
+                                    glyphgeneralprintmaincountervalue = MapData.Data[source_x, source_y].GlyphGeneralPrintMainCounterValue;
+                                    missile_height = MapData.Data[source_x, source_y].Layers.missile_height;
+                                    obj_in_pit = (MapData.Data[source_x, source_y].Layers.layer_flags & 4) != 0;
+                                    isDark = MapData.Data[mapx, mapy].IsDarkened;
+                                    /* Additional accesses matching PaintMapTile's flag reads */
+                                    bool transp = (MapData.Data[source_x, source_y].Layers.monster_flags & 0x10) != 0;
+                                    int hp = MapData.Data[source_x, source_y].Layers.monster_hp;
+                                    int maxhp = MapData.Data[source_x, source_y].Layers.monster_maxhp;
+                                    int gui_g = MapData.Data[source_x, source_y].Layers.layer_gui_glyph_6;
+                                    bool enlarg2 = MapData.Data[source_x, source_y].HasEnlargementOrAnimationOrSpecialHeight;
+                                }
+                                else
+                                {
+                                    /* When OFF: use the class-based MockMapData (pointer lookups, fast) */
+                                    loc_is_you = (layers.layer_flags & 1) != 0;
+                                    showing_detection = (layers.layer_flags & 2) != 0;
+                                    canspotself = (layers.monster_flags & 1) != 0;
+                                    monster_height = layers.special_monster_layer_height;
+                                    feature_doodad_height = layers.special_feature_doodad_layer_height;
+                                    missile_special_quality = layers.missile_special_quality;
+                                    monster_origin_x = layers.monster_origin_x;
+                                    monster_origin_y = layers.monster_origin_y;
+                                    glyphprintmaincountervalue = _mapData[source_x, source_y].GlyphPrintMainCounterValue;
+                                    glyphobjectprintmaincountervalue = _mapData[source_x, source_y].GlyphObjectPrintMainCounterValue;
+                                    glyphgeneralprintmaincountervalue = _mapData[source_x, source_y].GlyphGeneralPrintMainCounterValue;
+                                    missile_height = layers.missile_height;
+                                    obj_in_pit = (layers.layer_flags & 4) != 0;
+                                    isDark = _mapData[mapx, mapy].IsDarkened;
+                                }
                                 int movediffx = (int)monster_origin_x - source_x;
                                 int movediffy = (int)monster_origin_y - source_y;
                                 long maincounterdiff = maincountervalue - glyphprintmaincountervalue;
-                                long glyphobjectprintmaincountervalue = _mapData[source_x, source_y].GlyphObjectPrintMainCounterValue;
                                 long objectcounterdiff = maincountervalue - glyphobjectprintmaincountervalue;
-                                long glyphgeneralprintmaincountervalue = _mapData[source_x, source_y].GlyphGeneralPrintMainCounterValue;
                                 long generalcounterdiff = generalcountervalue - glyphgeneralprintmaincountervalue;
-                                short missile_height = layers.missile_height;
-                                bool obj_in_pit = (layers.layer_flags & 4) != 0;
 
                                 /* ---- Draw tile ---- */
                                 float tx = tileWidth * mapx;
@@ -659,7 +698,7 @@ namespace Net11FPSBenchmark
                                         srcX + GHConstants.TileWidth, srcY + GHConstants.TileHeight);
                                     var destRect = new SKRect(tx, ty,
                                         tx + GHConstants.TileWidth, ty + GHConstants.TileHeight);
-                                    var paint = _mapData[mapx, mapy].IsDarkened ? _darkenedPaint : _normalPaint;
+                                    var paint = isDark ? _darkenedPaint : _normalPaint;
                                     canvas.DrawImage(TileSheet, sourceRect, destRect,
                                         _samplingOptions, paint);
                                 }

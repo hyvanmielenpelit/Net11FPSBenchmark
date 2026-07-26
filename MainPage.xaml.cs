@@ -16,16 +16,17 @@ public partial class MainPage : ContentPage
 {
     private readonly BenchmarkRenderer _renderer = new BenchmarkRenderer();
     private readonly GnollHackRendererMock _ghRenderer = new GnollHackRendererMock();
-    private bool _useGnollHackRenderer = false;
+    private bool _useGnollHackRenderer = true;
+    private bool _simulateArrayBottleneck = true;
 
     private readonly Stopwatch _stopwatch;
 
-    // FPS calculation â€” same atomic counter approach as GnollHack
+    // FPS calculation: same atomic counter approach as GnollHack
     private long _frameCounter;
     private long _previousFrameCounter;
     private double _currentFps;
 
-    // Reentrancy guard â€” same pattern as GnollHack's IsMainCanvasDrawing
+    // Reentrancy guard: same pattern as GnollHack's IsMainCanvasDrawing
     private int _isDrawing;
 
     private bool _tileSheetLoaded;
@@ -87,7 +88,7 @@ public partial class MainPage : ContentPage
         // Generate synthetic map data
         MapData.Generate();
 
-        // Attach tap gesture to ALL buttons â€” each toggles minimap mode
+        // Attach tap gesture to ALL buttons : each toggles minimap mode
         // (makes it easy to test both modes from any button)
         var allButtons = new CachedImageButton[]
         {
@@ -98,6 +99,10 @@ public partial class MainPage : ContentPage
             BtnSwap, BtnFire, BtnThrow, BtnCast,
             BtnZap, BtnApply, BtnMore
         };
+
+        // Initialize toggle texts
+        ToggleRendererBtn.Text = "Renderer: GnollHack (Mock)";
+        ToggleRendererBtn.BackgroundColor = Colors.DarkGreen;
         foreach (var btn in allButtons)
         {
             var tapGesture = new TapGestureRecognizer();
@@ -117,7 +122,7 @@ public partial class MainPage : ContentPage
         // FPS counter timer (runs every second)
         Dispatcher.StartTimer(TimeSpan.FromSeconds(1), OnFpsTick);
 
-        // Message ticker â€” add a new random message every second
+        // Message ticker : add a new random message every second
         Dispatcher.StartTimer(TimeSpan.FromMilliseconds(1000), OnMessageTick);
     }
 
@@ -159,7 +164,7 @@ public partial class MainPage : ContentPage
     }
 
     /// <summary>
-    /// FPS calculation tick â€” runs every second.
+    /// FPS calculation tick : runs every second.
     /// </summary>
     private bool OnFpsTick()
     {
@@ -177,7 +182,7 @@ public partial class MainPage : ContentPage
     }
 
     /// <summary>
-    /// Message tick â€” add a new random message every second.
+    /// Message tick : add a new random message every second.
     /// </summary>
     private bool OnMessageTick()
     {
@@ -195,7 +200,7 @@ public partial class MainPage : ContentPage
     }
 
     /// <summary>
-    /// SKGLView paint handler â€” mirrors GnollHack's canvasView_PaintSurface.
+    /// SKGLView paint handler : mirrors GnollHack's canvasView_PaintSurface.
     /// </summary>
     private void OnPaintSurfaceGL(object? sender, SKPaintGLSurfaceEventArgs e)
     {
@@ -319,7 +324,7 @@ public partial class MainPage : ContentPage
     }
 
     /// <summary>
-    /// Toggle minimap mode â€” called by all button taps.
+    /// Toggle minimap mode - called by all button taps.
     /// </summary>
     private void ToggleMinimap()
     {
@@ -334,30 +339,22 @@ public partial class MainPage : ContentPage
         ToggleRendererBtn.BackgroundColor = _useGnollHackRenderer ? Colors.DarkGreen : Colors.DarkRed;
     }
 
-    private void OnButtonClicked(object? sender, EventArgs e)
+    private void ToggleArrayBottleneckBtn_Clicked(object sender, EventArgs e)
     {
-        // Placeholder for future click handling if needed
+        _simulateArrayBottleneck = !_simulateArrayBottleneck;
+        ToggleArrayBottleneckBtn.Text = _simulateArrayBottleneck ? "Array Bottleneck: ON" : "Array Bottleneck: OFF";
+        ToggleArrayBottleneckBtn.BackgroundColor = _simulateArrayBottleneck ? Colors.Purple : Colors.Gray;
+        _renderer.SimulateArrayBottleneck = _simulateArrayBottleneck;
+        _ghRenderer.SimulateArrayBottleneck = _simulateArrayBottleneck;
     }
 
-    private void OnTouch(object? sender, SKTouchEventArgs e)
+    private void OnButtonClicked(object sender, EventArgs e)
+    {
+    }
+
+    private void OnTouch(object sender, SKTouchEventArgs e)
     {
         e.Handled = true;
-    }
-
-    public struct LargeLayerInfo
-    {
-        public ulong flags1, flags2, flags3, flags4;
-        public int hp, maxhp;
-        public long someData1, someData2, someData3, someData4;
-        public long someData5, someData6, someData7, someData8;
-    }
-
-    public struct LargeMapCell
-    {
-        public LargeLayerInfo Layers;
-        public int Glyph;
-        public ulong Special;
-        public long moreData1, moreData2, moreData3, moreData4;
     }
 
     private async void RunArrayBenchmarkBtn_Clicked(object sender, EventArgs e)
@@ -369,27 +366,20 @@ public partial class MainPage : ContentPage
         {
             var sw = new Stopwatch();
             long sum = 0;
-            string output = "Array Benchmark Results (1000 frames, 80x21, 7 layers)\n";
-
             int Iterations = 1000;
-            int Cols = 80;
-            int Rows = 21;
-            int LayersCount = 7;
+            int Cols = Constants.MapCols;
+            int Rows = Constants.MapRows;
+            int LayersCount = 12;
 
-            LargeMapCell[,] _mapData2D = new LargeMapCell[Cols, Rows];
-            LargeMapCell[] _mapData1D = new LargeMapCell[Cols * Rows];
+            var data2D = MapData.Data;
 
-            // Init data
+            var data1D = new MapData.RealisticMapData[Cols * Rows];
             for (int y = 0; y < Rows; y++)
-            {
                 for (int x = 0; x < Cols; x++)
-                {
-                    _mapData2D[x, y].Layers.flags1 = (ulong)(x + y);
-                    _mapData1D[y * Cols + x].Layers.flags1 = (ulong)(x + y);
-                }
-            }
+                    data1D[y * Cols + x] = data2D[x, y];
 
-            // 1. Test Case 1: 2D Array Direct Access (CoreCLR Bottleneck)
+            string output = $"Array Benchmark ({Iterations} frames, {Cols}x{Rows}, {LayersCount} layers)\n";
+
             sw.Restart();
             for (int i = 0; i < Iterations; i++)
             {
@@ -399,18 +389,18 @@ public partial class MainPage : ContentPage
                     {
                         for (int l = 0; l < LayersCount; l++)
                         {
-                            if ((_mapData2D[x, y].Layers.flags1 & 0x1) != 0) sum++;
-                            if ((_mapData2D[x, y].Layers.flags2 & 0x1) != 0) sum++;
-                            if ((_mapData2D[x, y].Layers.flags3 & 0x1) != 0) sum++;
-                            if ((_mapData2D[x, y].Layers.flags4 & 0x1) != 0) sum++;
+                            if ((data2D[x, y].Layers.layer_flags & 0x1) != 0) sum++;
+                            if ((data2D[x, y].Layers.monster_flags & 0x1) != 0) sum++;
+                            sum += data2D[x, y].Layers.special_monster_layer_height;
+                            sum += data2D[x, y].Layers.monster_origin_x;
+                            sum += data2D[x, y].GlyphPrintMainCounterValue;
                         }
                     }
                 }
             }
             sw.Stop();
-            output += "\n1. 2D Array Access: " + sw.ElapsedMilliseconds + " ms";
+            output += $"\n1. 2D[x,y] Direct: {sw.ElapsedMilliseconds} ms";
 
-            // 2. Test Case 2: Struct Copy Assignment
             sw.Restart();
             for (int i = 0; i < Iterations; i++)
             {
@@ -420,19 +410,19 @@ public partial class MainPage : ContentPage
                     {
                         for (int l = 0; l < LayersCount; l++)
                         {
-                            var cell = _mapData2D[x, y]; 
-                            if ((cell.Layers.flags1 & 0x1) != 0) sum++;
-                            if ((cell.Layers.flags2 & 0x1) != 0) sum++;
-                            if ((cell.Layers.flags3 & 0x1) != 0) sum++;
-                            if ((cell.Layers.flags4 & 0x1) != 0) sum++;
+                            var cell = data2D[x, y];
+                            if ((cell.Layers.layer_flags & 0x1) != 0) sum++;
+                            if ((cell.Layers.monster_flags & 0x1) != 0) sum++;
+                            sum += cell.Layers.special_monster_layer_height;
+                            sum += cell.Layers.monster_origin_x;
+                            sum += cell.GlyphPrintMainCounterValue;
                         }
                     }
                 }
             }
             sw.Stop();
-            output += "\n2. Struct Copy: " + sw.ElapsedMilliseconds + " ms";
+            output += $"\n2. Struct Copy: {sw.ElapsedMilliseconds} ms";
 
-            // 3. Test Case 3: Ref Local Pointer
             sw.Restart();
             for (int i = 0; i < Iterations; i++)
             {
@@ -442,19 +432,19 @@ public partial class MainPage : ContentPage
                     {
                         for (int l = 0; l < LayersCount; l++)
                         {
-                            ref var cell = ref _mapData2D[x, y];
-                            if ((cell.Layers.flags1 & 0x1) != 0) sum++;
-                            if ((cell.Layers.flags2 & 0x1) != 0) sum++;
-                            if ((cell.Layers.flags3 & 0x1) != 0) sum++;
-                            if ((cell.Layers.flags4 & 0x1) != 0) sum++;
+                            ref var cell = ref data2D[x, y];
+                            if ((cell.Layers.layer_flags & 0x1) != 0) sum++;
+                            if ((cell.Layers.monster_flags & 0x1) != 0) sum++;
+                            sum += cell.Layers.special_monster_layer_height;
+                            sum += cell.Layers.monster_origin_x;
+                            sum += cell.GlyphPrintMainCounterValue;
                         }
                     }
                 }
             }
             sw.Stop();
-            output += "\n3. Ref Local: " + sw.ElapsedMilliseconds + " ms";
+            output += $"\n3. Ref Local: {sw.ElapsedMilliseconds} ms";
 
-            // 4. Test Case 4: Flattened 1D Array
             sw.Restart();
             for (int i = 0; i < Iterations; i++)
             {
@@ -464,18 +454,19 @@ public partial class MainPage : ContentPage
                     {
                         for (int l = 0; l < LayersCount; l++)
                         {
-                            if ((_mapData1D[y * Cols + x].Layers.flags1 & 0x1) != 0) sum++;
-                            if ((_mapData1D[y * Cols + x].Layers.flags2 & 0x1) != 0) sum++;
-                            if ((_mapData1D[y * Cols + x].Layers.flags3 & 0x1) != 0) sum++;
-                            if ((_mapData1D[y * Cols + x].Layers.flags4 & 0x1) != 0) sum++;
+                            if ((data1D[y * Cols + x].Layers.layer_flags & 0x1) != 0) sum++;
+                            if ((data1D[y * Cols + x].Layers.monster_flags & 0x1) != 0) sum++;
+                            sum += data1D[y * Cols + x].Layers.special_monster_layer_height;
+                            sum += data1D[y * Cols + x].Layers.monster_origin_x;
+                            sum += data1D[y * Cols + x].GlyphPrintMainCounterValue;
                         }
                     }
                 }
             }
             sw.Stop();
-            output += "\n4. 1D Array: " + sw.ElapsedMilliseconds + " ms";
+            output += $"\n4. 1D Array: {sw.ElapsedMilliseconds} ms";
 
-            output += "\nSum: " + sum;
+            output += $"\nSum: {sum}";
             return output;
         });
 
