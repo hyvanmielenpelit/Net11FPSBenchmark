@@ -119,7 +119,7 @@ namespace Net11FPSBenchmark
      *
      * Drawing loop:
      *   lock(Glyph2TileLock)
-     *     lock(_drawOrderLock)  — AlternativeLayerDrawing path
+     *     lock(_drawOrderLock)  â€” AlternativeLayerDrawing path
      *       for each mapy
      *         for each mapx
      *           for each draw_order entry
