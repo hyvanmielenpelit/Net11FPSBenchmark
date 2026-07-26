@@ -31,18 +31,23 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <!-- TOGGLE BUTTON -->
-            <Button x:Name="ToggleRendererBtn"
-                    Grid.Row="1"
-                    Text="Renderer: Simple"
-                    HorizontalOptions="Center"
-                    VerticalOptions="Center"
-                    Margin="10"
-                    Padding="10"
-                    BackgroundColor="DarkRed"
-                    TextColor="White"
-                    InputTransparent="False"
-                    Clicked="ToggleRendererBtn_Clicked" />
+            <!-- TOGGLE AND BENCHMARK BUTTONS -->
+            <VerticalStackLayout Grid.Row="1" HorizontalOptions="Center" VerticalOptions="Center" Spacing="10">
+                <Button x:Name="ToggleRendererBtn"
+                        Text="Renderer: Simple"
+                        Padding="10"
+                        BackgroundColor="DarkRed"
+                        TextColor="White"
+                        InputTransparent="False"
+                        Clicked="ToggleRendererBtn_Clicked" />
+                <Button x:Name="RunArrayBenchmarkBtn"
+                        Text="Run Array Benchmark"
+                        Padding="10"
+                        BackgroundColor="DarkBlue"
+                        TextColor="White"
+                        InputTransparent="False"
+                        Clicked="RunArrayBenchmarkBtn_Clicked" />
+            </VerticalStackLayout>
 
             <!-- ============================================================ -->
             <!-- TOP-RIGHT: Stone-style quick action buttons                   -->

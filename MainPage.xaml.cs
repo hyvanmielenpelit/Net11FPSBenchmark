@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using SkiaSharp;
 using SkiaSharp.Views.Maui;
 using SkiaSharp.Views.Maui.Controls;
@@ -20,12 +20,12 @@ public partial class MainPage : ContentPage
 
     private readonly Stopwatch _stopwatch;
 
-    // FPS calculation — same atomic counter approach as GnollHack
+    // FPS calculation â€” same atomic counter approach as GnollHack
     private long _frameCounter;
     private long _previousFrameCounter;
     private double _currentFps;
 
-    // Reentrancy guard — same pattern as GnollHack's IsMainCanvasDrawing
+    // Reentrancy guard â€” same pattern as GnollHack's IsMainCanvasDrawing
     private int _isDrawing;
 
     private bool _tileSheetLoaded;
@@ -87,7 +87,7 @@ public partial class MainPage : ContentPage
         // Generate synthetic map data
         MapData.Generate();
 
-        // Attach tap gesture to ALL buttons — each toggles minimap mode
+        // Attach tap gesture to ALL buttons â€” each toggles minimap mode
         // (makes it easy to test both modes from any button)
         var allButtons = new CachedImageButton[]
         {
@@ -117,7 +117,7 @@ public partial class MainPage : ContentPage
         // FPS counter timer (runs every second)
         Dispatcher.StartTimer(TimeSpan.FromSeconds(1), OnFpsTick);
 
-        // Message ticker — add a new random message every second
+        // Message ticker â€” add a new random message every second
         Dispatcher.StartTimer(TimeSpan.FromMilliseconds(1000), OnMessageTick);
     }
 
@@ -159,7 +159,7 @@ public partial class MainPage : ContentPage
     }
 
     /// <summary>
-    /// FPS calculation tick — runs every second.
+    /// FPS calculation tick â€” runs every second.
     /// </summary>
     private bool OnFpsTick()
     {
@@ -177,7 +177,7 @@ public partial class MainPage : ContentPage
     }
 
     /// <summary>
-    /// Message tick — add a new random message every second.
+    /// Message tick â€” add a new random message every second.
     /// </summary>
     private bool OnMessageTick()
     {
@@ -195,7 +195,7 @@ public partial class MainPage : ContentPage
     }
 
     /// <summary>
-    /// SKGLView paint handler — mirrors GnollHack's canvasView_PaintSurface.
+    /// SKGLView paint handler â€” mirrors GnollHack's canvasView_PaintSurface.
     /// </summary>
     private void OnPaintSurfaceGL(object? sender, SKPaintGLSurfaceEventArgs e)
     {
@@ -319,7 +319,7 @@ public partial class MainPage : ContentPage
     }
 
     /// <summary>
-    /// Toggle minimap mode — called by all button taps.
+    /// Toggle minimap mode â€” called by all button taps.
     /// </summary>
     private void ToggleMinimap()
     {
@@ -342,5 +342,146 @@ public partial class MainPage : ContentPage
     private void OnTouch(object? sender, SKTouchEventArgs e)
     {
         e.Handled = true;
+    }
+
+    public struct LargeLayerInfo
+    {
+        public ulong flags1, flags2, flags3, flags4;
+        public int hp, maxhp;
+        public long someData1, someData2, someData3, someData4;
+        public long someData5, someData6, someData7, someData8;
+    }
+
+    public struct LargeMapCell
+    {
+        public LargeLayerInfo Layers;
+        public int Glyph;
+        public ulong Special;
+        public long moreData1, moreData2, moreData3, moreData4;
+    }
+
+    private async void RunArrayBenchmarkBtn_Clicked(object sender, EventArgs e)
+    {
+        RunArrayBenchmarkBtn.IsEnabled = false;
+        RunArrayBenchmarkBtn.Text = "Running...";
+        
+        string result = await Task.Run(() => 
+        {
+            var sw = new Stopwatch();
+            long sum = 0;
+            string output = "Array Benchmark Results (1000 frames, 80x21, 7 layers)\n";
+
+            int Iterations = 1000;
+            int Cols = 80;
+            int Rows = 21;
+            int LayersCount = 7;
+
+            LargeMapCell[,] _mapData2D = new LargeMapCell[Cols, Rows];
+            LargeMapCell[] _mapData1D = new LargeMapCell[Cols * Rows];
+
+            // Init data
+            for (int y = 0; y < Rows; y++)
+            {
+                for (int x = 0; x < Cols; x++)
+                {
+                    _mapData2D[x, y].Layers.flags1 = (ulong)(x + y);
+                    _mapData1D[y * Cols + x].Layers.flags1 = (ulong)(x + y);
+                }
+            }
+
+            // 1. Test Case 1: 2D Array Direct Access (CoreCLR Bottleneck)
+            sw.Restart();
+            for (int i = 0; i < Iterations; i++)
+            {
+                for (int y = 0; y < Rows; y++)
+                {
+                    for (int x = 0; x < Cols; x++)
+                    {
+                        for (int l = 0; l < LayersCount; l++)
+                        {
+                            if ((_mapData2D[x, y].Layers.flags1 & 0x1) != 0) sum++;
+                            if ((_mapData2D[x, y].Layers.flags2 & 0x1) != 0) sum++;
+                            if ((_mapData2D[x, y].Layers.flags3 & 0x1) != 0) sum++;
+                            if ((_mapData2D[x, y].Layers.flags4 & 0x1) != 0) sum++;
+                        }
+                    }
+                }
+            }
+            sw.Stop();
+            output += "\n1. 2D Array Access: " + sw.ElapsedMilliseconds + " ms";
+
+            // 2. Test Case 2: Struct Copy Assignment
+            sw.Restart();
+            for (int i = 0; i < Iterations; i++)
+            {
+                for (int y = 0; y < Rows; y++)
+                {
+                    for (int x = 0; x < Cols; x++)
+                    {
+                        for (int l = 0; l < LayersCount; l++)
+                        {
+                            var cell = _mapData2D[x, y]; 
+                            if ((cell.Layers.flags1 & 0x1) != 0) sum++;
+                            if ((cell.Layers.flags2 & 0x1) != 0) sum++;
+                            if ((cell.Layers.flags3 & 0x1) != 0) sum++;
+                            if ((cell.Layers.flags4 & 0x1) != 0) sum++;
+                        }
+                    }
+                }
+            }
+            sw.Stop();
+            output += "\n2. Struct Copy: " + sw.ElapsedMilliseconds + " ms";
+
+            // 3. Test Case 3: Ref Local Pointer
+            sw.Restart();
+            for (int i = 0; i < Iterations; i++)
+            {
+                for (int y = 0; y < Rows; y++)
+                {
+                    for (int x = 0; x < Cols; x++)
+                    {
+                        for (int l = 0; l < LayersCount; l++)
+                        {
+                            ref var cell = ref _mapData2D[x, y];
+                            if ((cell.Layers.flags1 & 0x1) != 0) sum++;
+                            if ((cell.Layers.flags2 & 0x1) != 0) sum++;
+                            if ((cell.Layers.flags3 & 0x1) != 0) sum++;
+                            if ((cell.Layers.flags4 & 0x1) != 0) sum++;
+                        }
+                    }
+                }
+            }
+            sw.Stop();
+            output += "\n3. Ref Local: " + sw.ElapsedMilliseconds + " ms";
+
+            // 4. Test Case 4: Flattened 1D Array
+            sw.Restart();
+            for (int i = 0; i < Iterations; i++)
+            {
+                for (int y = 0; y < Rows; y++)
+                {
+                    for (int x = 0; x < Cols; x++)
+                    {
+                        for (int l = 0; l < LayersCount; l++)
+                        {
+                            if ((_mapData1D[y * Cols + x].Layers.flags1 & 0x1) != 0) sum++;
+                            if ((_mapData1D[y * Cols + x].Layers.flags2 & 0x1) != 0) sum++;
+                            if ((_mapData1D[y * Cols + x].Layers.flags3 & 0x1) != 0) sum++;
+                            if ((_mapData1D[y * Cols + x].Layers.flags4 & 0x1) != 0) sum++;
+                        }
+                    }
+                }
+            }
+            sw.Stop();
+            output += "\n4. 1D Array: " + sw.ElapsedMilliseconds + " ms";
+
+            output += "\nSum: " + sum;
+            return output;
+        });
+
+        await DisplayAlert("Benchmark Results", result, "OK");
+        
+        RunArrayBenchmarkBtn.IsEnabled = true;
+        RunArrayBenchmarkBtn.Text = "Run Array Benchmark";
     }
 }
