@@ -138,6 +138,7 @@ namespace Net11FPSBenchmark
         public bool SimulateArrayBottleneck = true;
         public bool SimulateCanvasTransform = true;
         public bool SimulateSplitDrawing = true;
+        public bool SimulateManagedStruct = true;
         private MockGame curGame = new MockGame();
         private List<MockDrawCommand> _mockDrawCommands = new List<MockDrawCommand>(512);
         private MockMapData[,] _mapData = new MockMapData[GHConstants.MapCols, GHConstants.MapRows];
@@ -643,7 +644,42 @@ namespace Net11FPSBenchmark
                                 long glyphprintmaincountervalue, glyphobjectprintmaincountervalue, glyphgeneralprintmaincountervalue;
                                 bool isDark;
 
-                                if (SimulateArrayBottleneck)
+                                if (SimulateManagedStruct)
+                                {
+                                    /* When ON: access the MANAGED struct array.
+                                     * ManagedMapData contains reference-type fields
+                                     * (int[], string, string[]). Each `ref` creates a
+                                     * managed interior pointer — slow on CoreCLR. */
+                                    ref MapData.ManagedMapData srcCell = ref MapData.ManagedData[source_x, source_y];
+                                    ref MapData.ManagedLayerInfo srcLayers = ref MapData.ManagedData[source_x, source_y].Layers;
+                                    loc_is_you = (srcLayers.layer_flags & 1) != 0;
+                                    showing_detection = (srcLayers.layer_flags & 2) != 0;
+                                    canspotself = (srcLayers.monster_flags & 1) != 0;
+                                    monster_height = srcLayers.special_monster_layer_height;
+                                    feature_doodad_height = srcLayers.special_feature_doodad_layer_height;
+                                    missile_special_quality = srcLayers.missile_special_quality;
+                                    monster_origin_x = srcLayers.monster_origin_x;
+                                    monster_origin_y = srcLayers.monster_origin_y;
+                                    glyphprintmaincountervalue = srcCell.GlyphPrintMainCounterValue;
+                                    glyphobjectprintmaincountervalue = srcCell.GlyphObjectPrintMainCounterValue;
+                                    glyphgeneralprintmaincountervalue = srcCell.GlyphGeneralPrintMainCounterValue;
+                                    missile_height = srcLayers.missile_height;
+                                    obj_in_pit = (srcLayers.layer_flags & 4) != 0;
+                                    isDark = MapData.ManagedData[mapx, mapy].NeedsUpdate; /* Touch another cell */
+                                    /* Additional accesses matching PaintMapTile's flag reads */
+                                    bool transp = (srcLayers.monster_flags & 0x10) != 0;
+                                    int hp = srcLayers.monster_hp;
+                                    int maxhp = srcLayers.monster_maxhp;
+                                    int gui_g = (srcLayers.layer_gui_glyphs != null && srcLayers.layer_gui_glyphs.Length > 6)
+                                        ? srcLayers.layer_gui_glyphs[6] : -1;
+                                    bool enlarg2 = srcCell.HasEnlargementOrAnimationOrSpecialHeight;
+
+                                    /* Simulate PaintMapTile ref passing */
+                                    ref MapData.ManagedMapData paintCell = ref MapData.ManagedData[source_x, source_y];
+                                    ref MapData.ManagedLayerInfo paintLayers = ref MapData.ManagedData[source_x, source_y].Layers;
+                                    bool touchPaint = paintCell.MapAnimated; /* Touch the ref */
+                                }
+                                else if (SimulateArrayBottleneck)
                                 {
                                     /* When ON: access the ~300-byte STRUCT array via
                                      * repeated 2D indexing — this is what kills CoreCLR.

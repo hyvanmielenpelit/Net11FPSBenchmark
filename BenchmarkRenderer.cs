@@ -16,6 +16,7 @@ public class BenchmarkRenderer
     public bool SimulateArrayBottleneck = true;
     public bool SimulateCanvasTransform = true;
     public bool SimulateSplitDrawing = true;
+    public bool SimulateManagedStruct = true;
     private SKImage? _tileSheet;
     private List<MockDrawCommand> _mockDrawCommands = new List<MockDrawCommand>(512);
     private readonly SKPaint _normalPaint;
@@ -46,6 +47,8 @@ public class BenchmarkRenderer
 
     private float _cameraX;
     private float _cameraY;
+    private long _mainCounterValue;
+    private long _generalCounterValue;
 
     // Message buffer — scrolling list with word-wrapped lines
     // Same approach as GnollHack's _msgHistory / GHMsgHistoryItem
@@ -234,96 +237,224 @@ public class BenchmarkRenderer
         var samplingOptions = new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None);
         _mockDrawCommands.Clear();
 
-        for (int layerIdx = 0; layerIdx < Constants.TotalRenderPasses; layerIdx++)
+        _mainCounterValue++;
+        _generalCounterValue++;
+
+        /* ============================================================
+         * TILE RENDERING — Standard (non-alternative) drawing path
+         * Matches GnollHack's GamePage.xaml.cs lines 8323-8400.
+         *
+         * Loop structure:
+         *   for each layer (0..21)
+         *     for each row
+         *       for each col
+         *         ref MapData currentCell = ref _mapData[mapx, mapy];
+         *         ref LayerInfo currentLayerInfo = ref _mapData[mapx, mapy].Layers;
+         *         ... read fields from currentCell and currentLayerInfo ...
+         *         PaintMapTile(ref _mapData[source_x, source_y], ...)
+         *
+         * This creates ~36,500 ref assignments per frame (22 layers × ~1660 cells).
+         * When the struct is managed (contains reference types), each ref
+         * assignment is a managed interior pointer — slow on CoreCLR.
+         * ============================================================ */
+
+        if (SimulateManagedStruct)
         {
-            for (int row = startRow; row < endRow; row++)
+            /* ---- MANAGED STRUCT PATH ----
+             * Uses ManagedMapData which contains reference-type fields
+             * (int[], string, string[]). Every `ref` local creates a
+             * managed interior pointer requiring GC tracking. */
+            for (int layerIdx = 0; layerIdx < Constants.TotalRenderPasses; layerIdx++)
             {
-                for (int col = startCol; col < endCol; col++)
+                for (int row = startRow; row < endRow; row++)
                 {
-                    ref readonly var cell = ref MapData.Cells[col, row];
-                    if (SimulateArrayBottleneck)
+                    for (int col = startCol; col < endCol; col++)
                     {
-                        /* Simulate GnollHack's drawing loop: ~19 separate
-                         * _mapData[x,y] accesses per draw-order layer.
-                         * Each access on CoreCLR re-computes the 2D address
-                         * and performs bounds checks on the ~300-byte struct. */
-                        bool loc_is_you = (MapData.Data[col, row].Layers.layer_flags & 1) != 0;
-                        bool showing_det = (MapData.Data[col, row].Layers.layer_flags & 2) != 0;
-                        bool canspotself = (MapData.Data[col, row].Layers.monster_flags & 1) != 0;
-                        sbyte mh = MapData.Data[col, row].Layers.special_monster_layer_height;
-                        sbyte fdh = MapData.Data[col, row].Layers.special_feature_doodad_layer_height;
-                        short msq = MapData.Data[col, row].Layers.missile_special_quality;
-                        sbyte mox = MapData.Data[col, row].Layers.monster_origin_x;
-                        sbyte moy = MapData.Data[col, row].Layers.monster_origin_y;
-                        long gpv = MapData.Data[col, row].GlyphPrintMainCounterValue;
-                        long opv = MapData.Data[col, row].GlyphObjectPrintMainCounterValue;
-                        long genv = MapData.Data[col, row].GlyphGeneralPrintMainCounterValue;
-                        short missile_h = MapData.Data[col, row].Layers.missile_height;
-                        bool obj_in_pit = (MapData.Data[col, row].Layers.layer_flags & 4) != 0;
-                        bool enlarg = MapData.Data[col, row].HasEnlargementOrAnimationOrSpecialHeight;
-                        bool dark = MapData.Data[col, row].IsDarkened;
-                        int gui_g = MapData.Data[col, row].Layers.layer_gui_glyph_6;
-                        bool transp = (MapData.Data[col, row].Layers.monster_flags & 0x10) != 0;
-                        int hp = MapData.Data[col, row].Layers.monster_hp;
-                        int maxhp = MapData.Data[col, row].Layers.monster_maxhp;
-                        /* Use results to prevent dead-code elimination */
-                        if (loc_is_you && mox == 127 && gpv == long.MaxValue) continue;
-                    }
-                    int tileIdx = cell.LayerTiles[layerIdx];
-                    if (tileIdx < 0)
-                        continue;
+                        /* Two ref assignments per cell per layer — matching
+                         * lines 8335-8337 of GamePage.xaml.cs */
+                        ref MapData.ManagedMapData currentCell = ref MapData.ManagedData[col, row];
+                        ref MapData.ManagedLayerInfo currentLayerInfo = ref MapData.ManagedData[col, row].Layers;
 
-                    tileIdx = tileIdx % Constants.TilesPerSheet;
+                        if (currentLayerInfo.layer_glyphs == null || currentLayerInfo.layer_gui_glyphs == null)
+                            continue;
 
-                    int srcX = (tileIdx % Constants.TilesPerRow) * Constants.TileWidth;
-                    int srcY = (tileIdx / Constants.TilesPerRow) * Constants.TileHeight;
-                    var sourceRect = new SKRect(srcX, srcY,
-                        srcX + Constants.TileWidth, srcY + Constants.TileHeight);
+                        /* Read fields through cached refs — matching
+                         * lines 8354-8370 of GamePage.xaml.cs */
+                        bool loc_is_you = (currentLayerInfo.layer_flags & 1) != 0;
+                        bool showing_detection = (currentLayerInfo.layer_flags & 2) != 0;
+                        bool canspotself = (currentLayerInfo.monster_flags & 1) != 0;
+                        sbyte monster_height = currentLayerInfo.special_monster_layer_height;
+                        sbyte feature_doodad_height = currentLayerInfo.special_feature_doodad_layer_height;
+                        short missile_special_quality = currentLayerInfo.missile_special_quality;
+                        sbyte monster_origin_x = currentLayerInfo.monster_origin_x;
+                        sbyte monster_origin_y = currentLayerInfo.monster_origin_y;
+                        long glyphprintmaincountervalue = currentCell.GlyphPrintMainCounterValue;
+                        long maincounterdiff = _mainCounterValue - glyphprintmaincountervalue;
+                        long glyphobjectprintmaincountervalue = currentCell.GlyphObjectPrintMainCounterValue;
+                        long objectcounterdiff = _mainCounterValue - glyphobjectprintmaincountervalue;
+                        long glyphgeneralprintmaincountervalue = currentCell.GlyphGeneralPrintMainCounterValue;
+                        long generalcounterdiff = _generalCounterValue - glyphgeneralprintmaincountervalue;
+                        short missile_height = currentLayerInfo.missile_height;
+                        bool obj_in_pit = (currentLayerInfo.layer_flags & 4) != 0;
 
+                        /* Prevent dead-code elimination */
+                        if (loc_is_you && monster_origin_x == 127 && glyphprintmaincountervalue == long.MaxValue) continue;
 
-                    // Darken top 7 rows and bottom 7 rows (mimics GnollHack's
-                    // lit center / dark periphery lighting model)
-                    bool isDarkened = row < 7 || row >= Constants.MapRows - 7;
-                    var paint = isDarkened ? _darkenedPaint : _normalPaint;
+                        /* Get tile to draw from the layer_glyphs array */
+                        int glyphIdx = (layerIdx < currentLayerInfo.layer_glyphs.Length)
+                            ? currentLayerInfo.layer_glyphs[layerIdx]
+                            : -1;
 
-                    if (SimulateCanvasTransform)
-                    {
-                        /* Simulate GnollHack's PaintMapTile:
-                         * Save/Translate/Scale/DrawImage/Restore per tile */
-                        canvas.Save();
-                        float destX = col * Constants.TileWidth;
-                        float destY = row * Constants.TileHeight;
-                        canvas.Translate(destX, destY);
-                        canvas.Scale(1.0f, 1.0f, 0, 0);
-                        var destRect = new SKRect(0, 0,
-                            Constants.TileWidth, Constants.TileHeight);
-                        canvas.DrawImage(_tileSheet, sourceRect, destRect,
-                            samplingOptions, paint);
-                        canvas.Restore();
-                    }
-                    else
-                    {
-                        float destX = col * Constants.TileWidth;
-                        float destY = row * Constants.TileHeight;
-                        var destRect = new SKRect(destX, destY,
-                            destX + Constants.TileWidth, destY + Constants.TileHeight);
-                        canvas.DrawImage(_tileSheet, sourceRect, destRect,
-                            samplingOptions, paint);
-                    }
+                        /* Simulate passing ref to PaintMapTile —
+                         * 2 more ref assignments matching line 8303 */
+                        ref MapData.ManagedMapData paintCell = ref MapData.ManagedData[col, row];
+                        ref MapData.ManagedLayerInfo paintLayers = ref MapData.ManagedData[col, row].Layers;
+                        bool isDark = paintCell.NeedsUpdate; /* Touch the ref */
 
-                    /* Store for delayed replay on non-floor layers */
-                    if (SimulateSplitDrawing && layerIdx > 0)
-                    {
-                        float dx = col * Constants.TileWidth;
-                        float dy = row * Constants.TileHeight;
-                        _mockDrawCommands.Add(new MockDrawCommand
+                        /* Use the cell ref for darkening check */
+                        bool isDarkened = row < 7 || row >= Constants.MapRows - 7;
+
+                        if (glyphIdx >= 0 && _tileSheet != null)
                         {
-                            Matrix = canvas.TotalMatrix,
-                            SourceRect = sourceRect,
-                            DestRect = new SKRect(dx, dy,
-                                dx + Constants.TileWidth, dy + Constants.TileHeight),
-                            IsDark = isDarkened
-                        });
+                            int tileIdx = glyphIdx % Constants.TilesPerSheet;
+                            int srcX = (tileIdx % Constants.TilesPerRow) * Constants.TileWidth;
+                            int srcY = (tileIdx / Constants.TilesPerRow) * Constants.TileHeight;
+                            var sourceRect = new SKRect(srcX, srcY,
+                                srcX + Constants.TileWidth, srcY + Constants.TileHeight);
+                            var paint = isDarkened ? _darkenedPaint : _normalPaint;
+
+                            if (SimulateCanvasTransform)
+                            {
+                                canvas.Save();
+                                float destX = col * Constants.TileWidth;
+                                float destY = row * Constants.TileHeight;
+                                canvas.Translate(destX, destY);
+                                canvas.Scale(1.0f, 1.0f, 0, 0);
+                                var destRect = new SKRect(0, 0,
+                                    Constants.TileWidth, Constants.TileHeight);
+                                canvas.DrawImage(_tileSheet, sourceRect, destRect,
+                                    samplingOptions, paint);
+                                canvas.Restore();
+                            }
+                            else
+                            {
+                                float destX = col * Constants.TileWidth;
+                                float destY = row * Constants.TileHeight;
+                                var destRect = new SKRect(destX, destY,
+                                    destX + Constants.TileWidth, destY + Constants.TileHeight);
+                                canvas.DrawImage(_tileSheet, sourceRect, destRect,
+                                    samplingOptions, paint);
+                            }
+
+                            if (SimulateSplitDrawing && layerIdx > 0)
+                            {
+                                float dx = col * Constants.TileWidth;
+                                float dy = row * Constants.TileHeight;
+                                _mockDrawCommands.Add(new MockDrawCommand
+                                {
+                                    Matrix = canvas.TotalMatrix,
+                                    SourceRect = sourceRect,
+                                    DestRect = new SKRect(dx, dy,
+                                        dx + Constants.TileWidth, dy + Constants.TileHeight),
+                                    IsDark = isDarkened
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            /* ---- BLITTABLE STRUCT PATH ----
+             * Uses RealisticMapData which contains only value-type fields.
+             * `ref` locals are raw pointers — fast on CoreCLR. */
+            for (int layerIdx = 0; layerIdx < Constants.TotalRenderPasses; layerIdx++)
+            {
+                for (int row = startRow; row < endRow; row++)
+                {
+                    for (int col = startCol; col < endCol; col++)
+                    {
+                        if (SimulateArrayBottleneck)
+                        {
+                            /* Same ref pattern as managed path, but with
+                             * blittable struct — fast pointer arithmetic */
+                            ref MapData.RealisticMapData currentCell = ref MapData.Data[col, row];
+                            ref MapData.RealisticLayerInfo currentLayerInfo = ref MapData.Data[col, row].Layers;
+
+                            bool loc_is_you = (currentLayerInfo.layer_flags & 1) != 0;
+                            bool showing_det = (currentLayerInfo.layer_flags & 2) != 0;
+                            bool canspotself = (currentLayerInfo.monster_flags & 1) != 0;
+                            sbyte mh = currentLayerInfo.special_monster_layer_height;
+                            sbyte fdh = currentLayerInfo.special_feature_doodad_layer_height;
+                            short msq = currentLayerInfo.missile_special_quality;
+                            sbyte mox = currentLayerInfo.monster_origin_x;
+                            sbyte moy = currentLayerInfo.monster_origin_y;
+                            long gpv = currentCell.GlyphPrintMainCounterValue;
+                            long opv = currentCell.GlyphObjectPrintMainCounterValue;
+                            long genv = currentCell.GlyphGeneralPrintMainCounterValue;
+                            short missile_h = currentLayerInfo.missile_height;
+                            bool obj_in_pit = (currentLayerInfo.layer_flags & 4) != 0;
+
+                            /* Simulate PaintMapTile ref passing */
+                            ref MapData.RealisticMapData paintCell = ref MapData.Data[col, row];
+                            ref MapData.RealisticLayerInfo paintLayers = ref MapData.Data[col, row].Layers;
+                            bool enlarg = paintCell.HasEnlargementOrAnimationOrSpecialHeight;
+
+                            if (loc_is_you && mox == 127 && gpv == long.MaxValue) continue;
+                        }
+
+                        ref readonly var cell = ref MapData.Cells[col, row];
+                        int tileIdx = cell.LayerTiles[layerIdx];
+                        if (tileIdx < 0)
+                            continue;
+
+                        tileIdx = tileIdx % Constants.TilesPerSheet;
+
+                        int srcX = (tileIdx % Constants.TilesPerRow) * Constants.TileWidth;
+                        int srcY = (tileIdx / Constants.TilesPerRow) * Constants.TileHeight;
+                        var sourceRect = new SKRect(srcX, srcY,
+                            srcX + Constants.TileWidth, srcY + Constants.TileHeight);
+
+                        bool isDarkened = row < 7 || row >= Constants.MapRows - 7;
+                        var paint = isDarkened ? _darkenedPaint : _normalPaint;
+
+                        if (SimulateCanvasTransform)
+                        {
+                            canvas.Save();
+                            float destX = col * Constants.TileWidth;
+                            float destY = row * Constants.TileHeight;
+                            canvas.Translate(destX, destY);
+                            canvas.Scale(1.0f, 1.0f, 0, 0);
+                            var destRect = new SKRect(0, 0,
+                                Constants.TileWidth, Constants.TileHeight);
+                            canvas.DrawImage(_tileSheet, sourceRect, destRect,
+                                samplingOptions, paint);
+                            canvas.Restore();
+                        }
+                        else
+                        {
+                            float destX = col * Constants.TileWidth;
+                            float destY = row * Constants.TileHeight;
+                            var destRect = new SKRect(destX, destY,
+                                destX + Constants.TileWidth, destY + Constants.TileHeight);
+                            canvas.DrawImage(_tileSheet, sourceRect, destRect,
+                                samplingOptions, paint);
+                        }
+
+                        if (SimulateSplitDrawing && layerIdx > 0)
+                        {
+                            float dx = col * Constants.TileWidth;
+                            float dy = row * Constants.TileHeight;
+                            _mockDrawCommands.Add(new MockDrawCommand
+                            {
+                                Matrix = canvas.TotalMatrix,
+                                SourceRect = sourceRect,
+                                DestRect = new SKRect(dx, dy,
+                                    dx + Constants.TileWidth, dy + Constants.TileHeight),
+                                IsDark = isDarkened
+                            });
+                        }
                     }
                 }
             }

@@ -47,6 +47,13 @@
                         TextColor="White"
                         InputTransparent="False"
                         Clicked="ToggleArrayBottleneckBtn_Clicked" />
+                <Button x:Name="ToggleManagedStructBtn"
+                        Text="Managed Struct: ON"
+                        Padding="10"
+                        BackgroundColor="DarkMagenta"
+                        TextColor="White"
+                        InputTransparent="False"
+                        Clicked="ToggleManagedStructBtn_Clicked" />
                 <Button x:Name="ToggleCanvasTransformBtn"
                         Text="Canvas Transform: ON"
                         Padding="10"

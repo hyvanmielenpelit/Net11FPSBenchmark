@@ -20,6 +20,7 @@ public partial class MainPage : ContentPage
     private bool _simulateArrayBottleneck = true;
     private bool _simulateCanvasTransform = true;
     private bool _simulateSplitDrawing = true;
+    private bool _simulateManagedStruct = true;
 
     private readonly Stopwatch _stopwatch;
 
@@ -368,6 +369,15 @@ public partial class MainPage : ContentPage
         _ghRenderer.SimulateSplitDrawing = _simulateSplitDrawing;
     }
 
+    private void ToggleManagedStructBtn_Clicked(object sender, EventArgs e)
+    {
+        _simulateManagedStruct = !_simulateManagedStruct;
+        ToggleManagedStructBtn.Text = _simulateManagedStruct ? "Managed Struct: ON" : "Managed Struct: OFF";
+        ToggleManagedStructBtn.BackgroundColor = _simulateManagedStruct ? Colors.DarkMagenta : Colors.Gray;
+        _renderer.SimulateManagedStruct = _simulateManagedStruct;
+        _ghRenderer.SimulateManagedStruct = _simulateManagedStruct;
+    }
+
     private void OnButtonClicked(object sender, EventArgs e)
     {
     }
@@ -485,6 +495,55 @@ public partial class MainPage : ContentPage
             }
             sw.Stop();
             output += $"\n4. 1D Array: {sw.ElapsedMilliseconds} ms";
+
+            /* Test 5: Managed struct 2D array with ref (the slow path) */
+            var managed2D = MapData.ManagedData;
+            sw.Restart();
+            for (int i = 0; i < Iterations; i++)
+            {
+                for (int y = 0; y < Rows; y++)
+                {
+                    for (int x = 0; x < Cols; x++)
+                    {
+                        for (int l = 0; l < LayersCount; l++)
+                        {
+                            ref MapData.ManagedMapData cell = ref managed2D[x, y];
+                            ref MapData.ManagedLayerInfo layers = ref managed2D[x, y].Layers;
+                            if ((layers.layer_flags & 0x1) != 0) sum++;
+                            if ((layers.monster_flags & 0x1) != 0) sum++;
+                            sum += layers.special_monster_layer_height;
+                            sum += layers.monster_origin_x;
+                            sum += cell.GlyphPrintMainCounterValue;
+                        }
+                    }
+                }
+            }
+            sw.Stop();
+            output += $"\n5. Managed 2D Ref: {sw.ElapsedMilliseconds} ms";
+
+            /* Test 6: Blittable struct 2D array with ref (should be fast) */
+            sw.Restart();
+            for (int i = 0; i < Iterations; i++)
+            {
+                for (int y = 0; y < Rows; y++)
+                {
+                    for (int x = 0; x < Cols; x++)
+                    {
+                        for (int l = 0; l < LayersCount; l++)
+                        {
+                            ref MapData.RealisticMapData cell = ref data2D[x, y];
+                            ref MapData.RealisticLayerInfo layers = ref data2D[x, y].Layers;
+                            if ((layers.layer_flags & 0x1) != 0) sum++;
+                            if ((layers.monster_flags & 0x1) != 0) sum++;
+                            sum += layers.special_monster_layer_height;
+                            sum += layers.monster_origin_x;
+                            sum += cell.GlyphPrintMainCounterValue;
+                        }
+                    }
+                }
+            }
+            sw.Stop();
+            output += $"\n6. Blittable 2D Ref: {sw.ElapsedMilliseconds} ms";
 
             output += $"\nSum: {sum}";
             return output;

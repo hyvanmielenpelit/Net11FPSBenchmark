@@ -1,3 +1,5 @@
+using SkiaSharp;
+
 namespace Net11FPSBenchmark;
 
 /// <summary>
@@ -151,6 +153,186 @@ public static class MapData
                 Data[col, row].GlyphGeneralPrintMainCounterValue = rng.Next(0, 1000);
                 Data[col, row].HasEnlargementOrAnimationOrSpecialHeight = rng.NextDouble() < 0.1;
                 Data[col, row].IsDarkened = rng.NextDouble() < 0.4;
+            }
+        }
+    }
+
+    /* ================================================================
+     * MANAGED STRUCT HIERARCHY
+     *
+     * These mirror GnollHack's ACTUAL MapData/LayerInfo/EngravingInfo
+     * structs which contain reference-type fields (int[], string,
+     * string[], ulong[], sbyte[]). This makes the structs "managed"
+     * (non-blittable), forcing the runtime to use MANAGED INTERIOR
+     * POINTERS when creating `ref` locals to 2D array elements.
+     *
+     * On CoreCLR (especially ARM64 iOS R2R), managed interior pointers
+     * require GC tracking instructions around every `ref` assignment.
+     * This is the root cause of the .NET 11 performance regression.
+     *
+     * Compare with RealisticMapData above, which uses only value-type
+     * fields (ints, shorts, etc.) and is therefore blittable — the
+     * JIT can use raw pointer arithmetic for `ref` locals, which is
+     * much faster.
+     * ================================================================ */
+
+    /// <summary>
+    /// Mirrors GnollHack's LayerInfo struct (GHStructs.cs:89-146).
+    /// Contains reference-type array fields that make it managed.
+    /// ~180+ bytes with 5 array references and 1 IntPtr.
+    /// </summary>
+    public struct ManagedLayerInfo
+    {
+        /* Ascii compatibility glyphs */
+        public int glyph;
+        public int bkglyph;
+
+        /* Layer glyph arrays — REFERENCE TYPES (the key performance killer) */
+        public int[] layer_glyphs;      /* MAX_LAYERS = 10 elements */
+        public int[] layer_gui_glyphs;  /* MAX_LAYERS = 10 elements */
+
+        /* Flags */
+        public ulong layer_flags;
+        public uint m_id;
+        public uint o_id;
+
+        /* Memory object chain pointer */
+        public IntPtr memory_objchn;
+
+        /* Display data */
+        public short damage_displayed;
+        public short hit_tile;
+
+        /* Height and origin fields */
+        public sbyte special_feature_doodad_layer_height;
+        public sbyte special_monster_layer_height;
+        public sbyte monster_origin_x;
+        public sbyte monster_origin_y;
+        public int monster_hp;
+        public int monster_maxhp;
+        public int rider_glyph;
+        public int rider_gui_glyph;
+        public ulong status_bits;
+        public ulong condition_bits;
+
+        /* Buff bits — REFERENCE TYPE */
+        public ulong[] buff_bits;       /* NUM_BUFF_BIT_ULONGS = 8 elements */
+
+        /* Worm segment direction */
+        public sbyte wsegdir;
+        public sbyte reverse_prev_wsegdir;
+        public ulong monster_flags;
+
+        /* Object/missile data */
+        public short object_height;
+        public byte missile_poisoned;
+        public byte missile_material;
+        public short missile_special_quality;
+        public byte missile_elemental_enchantment;
+        public byte missile_exceptionality;
+        public byte missile_mythic_prefix;
+        public byte missile_mythic_suffix;
+        public byte missile_eroded;
+        public byte missile_eroded2;
+        public ulong missile_flags;
+        public short missile_height;
+        public sbyte missile_origin_x;
+        public sbyte missile_origin_y;
+
+        /* Leash coordinates — REFERENCE TYPES */
+        public sbyte[] leash_mon_x;    /* MaxLeashed + 1 = 3 elements */
+        public sbyte[] leash_mon_y;    /* MaxLeashed + 1 = 3 elements */
+    }
+
+    /// <summary>
+    /// Mirrors GnollHack's EngravingInfo struct (GHStructs.cs:428-467).
+    /// Contains string and string[] reference-type fields.
+    /// </summary>
+    public struct ManagedEngravingInfo
+    {
+        public bool HasEngraving;
+        public string Text;            /* REFERENCE TYPE */
+        public int EngrType;
+        public ulong EngrFlags;
+        public ulong GeneralFlags;
+        public string[] RowSplit;      /* REFERENCE TYPE */
+    }
+
+    /// <summary>
+    /// Mirrors GnollHack's actual MapData struct (MapData.cs:11-30).
+    /// Contains reference-type fields making it managed (non-blittable).
+    /// Every `ref ManagedMapData cell = ref managedData[x,y]` creates
+    /// a managed interior pointer, which is slow on CoreCLR.
+    /// </summary>
+    public struct ManagedMapData
+    {
+        public int Glyph;
+        public int BkGlyph;
+        public string Symbol;          /* REFERENCE TYPE */
+        public SKColor Color;
+        public ulong Special;
+        public ManagedLayerInfo Layers;
+        public long GlyphPrintAnimationCounterValue;
+        public long GlyphPrintMainCounterValue;
+        public long GlyphObjectPrintAnimationCounterValue;
+        public long GlyphObjectPrintMainCounterValue;
+        public long GlyphGeneralPrintAnimationCounterValue;
+        public long GlyphGeneralPrintMainCounterValue;
+        public bool NeedsUpdate;
+        public bool MapAnimated;
+        public bool RedrawTile;
+        public bool HasEnlargementOrAnimationOrSpecialHeight;
+        public ManagedEngravingInfo Engraving;
+    }
+
+    /// <summary>
+    /// The 2D managed struct array that simulates GnollHack's _mapData[,].
+    /// Because ManagedMapData contains reference-type fields, every
+    /// `ref ManagedMapData cell = ref ManagedData[x,y]` forces managed
+    /// interior pointer creation, which is the key performance difference.
+    /// </summary>
+    public static ManagedMapData[,] ManagedData { get; private set; } = new ManagedMapData[DataCols, DataRows];
+
+    /// <summary>
+    /// Initialize the managed struct data with the same values as
+    /// RealisticData, plus allocating all reference-type arrays.
+    /// </summary>
+    public static void GenerateManagedData()
+    {
+        var rng = new Random(42); /* Same seed for identical data */
+        for (int col = 0; col < DataCols; col++)
+        {
+            for (int row = 0; row < DataRows; row++)
+            {
+                ref var cell = ref ManagedData[col, row];
+
+                /* Allocate reference-type arrays (this is what makes it managed!) */
+                cell.Layers.layer_glyphs = new int[10];
+                cell.Layers.layer_gui_glyphs = new int[10];
+                cell.Layers.buff_bits = new ulong[8];
+                cell.Layers.leash_mon_x = new sbyte[3];
+                cell.Layers.leash_mon_y = new sbyte[3];
+                cell.Engraving.Text = "";
+                cell.Engraving.RowSplit = Array.Empty<string>();
+                cell.Symbol = ".";
+
+                /* Fill with same random data */
+                cell.Layers.layer_flags = (ulong)rng.NextInt64();
+                cell.Layers.monster_flags = (ulong)rng.NextInt64();
+                cell.Layers.layer_glyphs[0] = rng.Next(3000);
+                cell.Layers.layer_gui_glyphs[0] = cell.Layers.layer_glyphs[0];
+                cell.Layers.layer_glyphs[6] = rng.Next(3000);
+                cell.Layers.layer_gui_glyphs[6] = cell.Layers.layer_glyphs[6];
+                cell.Layers.special_monster_layer_height = (sbyte)rng.Next(0, 3);
+                cell.Layers.monster_origin_x = (sbyte)(col % 20);
+                cell.Layers.monster_origin_y = (sbyte)(row % 20);
+                cell.Layers.missile_height = (short)rng.Next(0, 10);
+                cell.Layers.monster_hp = rng.Next(1, 100);
+                cell.Layers.monster_maxhp = 100;
+                cell.GlyphPrintMainCounterValue = rng.Next(0, 1000);
+                cell.GlyphObjectPrintMainCounterValue = rng.Next(0, 1000);
+                cell.GlyphGeneralPrintMainCounterValue = rng.Next(0, 1000);
+                cell.HasEnlargementOrAnimationOrSpecialHeight = rng.NextDouble() < 0.1;
             }
         }
     }
@@ -338,5 +520,8 @@ public static class MapData
 
         // Also generate the realistic struct data
         GenerateRealisticData();
+
+        // Also generate the managed struct data (with reference-type fields)
+        GenerateManagedData();
     }
 }

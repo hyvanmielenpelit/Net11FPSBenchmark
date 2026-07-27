@@ -50,6 +50,10 @@
 	  <CodesignKey>Apple Development: Created via API (79X3KBSWAS)</CodesignKey>
 	  <CodesignProvision>VS: WildCard Development</CodesignProvision>
 	</PropertyGroup>
+	<PropertyGroup Condition="'$(TargetFramework)'=='net11.0-ios'">
+	  <CodesignKey>Apple Development: Created via API (79X3KBSWAS)</CodesignKey>
+	  <CodesignProvision>VS: WildCard Development</CodesignProvision>
+	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
